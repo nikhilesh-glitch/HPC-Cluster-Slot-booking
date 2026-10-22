@@ -1,6 +1,7 @@
 {
   "name": "hpc-slot-booking-system",
   "version": "1.0.0",
+  "type": "module",
   "description": "HPC cluster slot booking and telemetry calendar system for GitHub Pages",
   "scripts": {
     "dev": "vite",

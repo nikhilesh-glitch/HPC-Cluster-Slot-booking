@@ -59,6 +59,13 @@
 
       <!-- Right Action / Status Area -->
       <div class="flex items-center space-x-3">
+        <!-- Live Cluster SSH Feed Button -->
+        <button id="btn-cluster-ssh" class="flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-800 border border-slate-700 hover:border-slate-600 transition" title="Cluster SSH Feed (10.206.4.128)">
+          <span id="ssh-feed-indicator" class="h-2 w-2 rounded-full bg-slate-500"></span>
+          <span id="ssh-feed-label" class="text-slate-300">Live Feed: 10.206.4.128</span>
+          <span class="text-[10px] px-1 rounded bg-slate-900 text-blue-400 font-mono">7s</span>
+        </button>
+
         <!-- Sync Status Pill -->
         <button id="sync-status-btn" class="flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-800 border border-slate-700 hover:border-slate-600 transition">
           <span id="sync-indicator" class="h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
@@ -87,205 +94,309 @@
   <!-- MAIN WRAPPER -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
 
-    <!-- TELEMETRY & NODE METRICS DASHBOARD -->
-    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
-      <div class="flex flex-col lg:flex-row lg:items-center justify-between pb-4 mb-4 border-b border-slate-800 gap-4">
-        <div class="flex items-center space-x-3">
-          <div class="p-2 rounded-lg bg-emerald-950/60 border border-emerald-800/50 text-emerald-400">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <div>
-            <div class="flex items-center space-x-2">
-              <h2 id="telemetry-node-title" class="text-base font-bold text-white">Node 10 Live Telemetry</h2>
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-950 text-emerald-400 border border-emerald-800">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
-                ONLINE
+    <!-- DUAL SLURM PANEL: LEFT (sinfo) & RIGHT (squeue) -->
+    <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      
+      <!-- LEFT PANEL: sinfo (Cluster Partitions & Node States) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+        <div>
+          <!-- Header -->
+          <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+            <div class="flex items-center space-x-2.5">
+              <span class="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono text-xs font-bold shadow-sm">
+                SI
               </span>
+              <div>
+                <div class="flex items-center space-x-2">
+                  <h3 class="text-sm font-bold text-white tracking-wide font-mono">sinfo</h3>
+                  <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">Cluster Nodes & Partitions</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-0.5">8 Compute Nodes (64c) + 1 GPU Node (64c + 4x A100)</p>
+              </div>
             </div>
-            <p id="telemetry-node-specs" class="text-xs text-slate-400 mt-0.5">64 Cores AMD EPYC • 256GB DDR4 RAM • 3.84TB NVMe</p>
+            <!-- Actions: Fetch Live & Raw Toggle -->
+            <div class="flex items-center space-x-2">
+              <button id="btn-fetch-sinfo" type="button" class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30 transition cursor-pointer">
+                <svg id="sinfo-fetch-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                <span id="sinfo-fetch-label">Fetch Live</span>
+              </button>
+              <button id="btn-toggle-sinfo-view" type="button" class="px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="Toggle Raw Output">
+                Raw CLI
+              </button>
+            </div>
           </div>
+
+          <!-- Table View Container -->
+          <div id="sinfo-table-container" class="overflow-x-auto max-h-64 overflow-y-auto rounded-xl border border-slate-800/80 bg-slate-950/60 font-mono text-xs">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-slate-900/90 text-slate-400 text-[10px] uppercase tracking-wider sticky top-0 border-b border-slate-800">
+                <tr>
+                  <th class="p-2.5">Partition</th>
+                  <th class="p-2.5">Avail</th>
+                  <th class="p-2.5">TimeLim</th>
+                  <th class="p-2.5 text-center">Nodes</th>
+                  <th class="p-2.5">State</th>
+                  <th class="p-2.5">NodeList</th>
+                </tr>
+              </thead>
+              <tbody id="sinfo-tbody" class="divide-y divide-slate-800/60 text-[11px] text-slate-300">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Raw CLI View Container -->
+          <pre id="sinfo-raw-container" class="hidden p-3 rounded-xl border border-slate-800/80 bg-slate-950 text-emerald-400 font-mono text-xs max-h-64 overflow-y-auto overflow-x-auto whitespace-pre leading-relaxed"></pre>
         </div>
 
-        <!-- Telemetry Timestamp -->
-        <div class="text-xs text-slate-400 flex items-center space-x-2 self-start lg:self-auto">
-          <span>Last telemetry probe: <strong id="telemetry-time" class="text-slate-200">--:--:--</strong></span>
-          <span class="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse-subtle"></span>
-        </div>
-      </div>
-
-      <!-- Real-time metrics grid -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <!-- CPU Gauge -->
-        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
-          <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>CPU Load</span>
-            <span id="telemetry-cpu-val" class="font-bold text-blue-400">88.4%</span>
+        <!-- Footer / Summary -->
+        <div class="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+          <div class="flex items-center space-x-3 text-[11px]">
+            <span class="flex items-center space-x-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span id="sinfo-idle-count" class="font-medium text-slate-300">9 Idle</span>
+            </span>
+            <span class="flex items-center space-x-1.5">
+              <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+              <span id="sinfo-alloc-count" class="font-medium text-slate-300">0 Allocated</span>
+            </span>
           </div>
-          <div class="w-full bg-slate-800 rounded-full h-2">
-            <div id="telemetry-cpu-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-500" style="width: 88.4%"></div>
-          </div>
-          <div class="text-[11px] text-slate-500 mt-1.5">64 Cores Active</div>
-        </div>
-
-        <!-- Memory Gauge -->
-        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
-          <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Memory (RAM)</span>
-            <span id="telemetry-ram-val" class="font-bold text-indigo-400">214 / 256 GB</span>
-          </div>
-          <div class="w-full bg-slate-800 rounded-full h-2">
-            <div id="telemetry-ram-bar" class="bg-indigo-500 h-2 rounded-full transition-all duration-500" style="width: 84%"></div>
-          </div>
-          <div class="text-[11px] text-slate-500 mt-1.5">84% Allocated</div>
-        </div>
-
-        <!-- Power & Temp -->
-        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
-          <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
-            <span>Thermal / Power</span>
-            <span id="telemetry-temp-val" class="font-bold text-amber-400">54°C • 420W</span>
-          </div>
-          <div class="w-full bg-slate-800 rounded-full h-2">
-            <div id="telemetry-temp-bar" class="bg-amber-500 h-2 rounded-full transition-all duration-500" style="width: 55%"></div>
-          </div>
-          <div class="text-[11px] text-slate-500 mt-1.5">Nominal Operating Temp</div>
-        </div>
-
-        <!-- Slurm Active Workload -->
-        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
-          <div class="flex items-center justify-between text-xs text-slate-400">
-            <span>Slurm Workload</span>
-            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">RUNNING</span>
-          </div>
-          <div id="telemetry-job-info" class="text-xs font-medium text-slate-200 truncate mt-1">
-            GATK_haplotype_caller.sh
-          </div>
-          <div id="telemetry-job-user" class="text-[11px] text-slate-400">
-            Dr. Sarah Chen (Elapsed: 03:12:45)
-          </div>
+          <span class="text-[10px] text-slate-500 font-mono">Slurm Cluster • 10.206.4.128</span>
         </div>
       </div>
 
-      <!-- GPU Card Section (Only visible when GPU node is active) -->
-      <div id="telemetry-gpu-container" class="mt-4 pt-4 border-t border-slate-800 hidden">
-        <h4 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">NVIDIA A100 GPU Acceleration Metrics</h4>
-        <div id="telemetry-gpu-grid" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <!-- Dynamically populated -->
+      <!-- RIGHT PANEL: squeue (Slurm Active & Queued Jobs) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col justify-between">
+        <div>
+          <!-- Header -->
+          <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
+            <div class="flex items-center space-x-2.5">
+              <span class="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-950 text-blue-400 border border-blue-800 font-mono text-xs font-bold shadow-sm">
+                SQ
+              </span>
+              <div>
+                <div class="flex items-center space-x-2">
+                  <h3 class="text-sm font-bold text-white tracking-wide font-mono">squeue</h3>
+                  <span id="squeue-count-badge" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">0 Running</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-0.5">Active running & queued batch jobs</p>
+              </div>
+            </div>
+            <!-- Actions: Fetch Live & Raw Toggle -->
+            <div class="flex items-center space-x-2">
+              <button id="btn-fetch-squeue" type="button" class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/30 transition cursor-pointer">
+                <svg id="squeue-fetch-icon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                <span id="squeue-fetch-label">Fetch Live</span>
+              </button>
+              <button id="btn-toggle-squeue-view" type="button" class="px-2.5 py-1 rounded-lg text-[11px] font-mono font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="Toggle Raw Output">
+                Raw CLI
+              </button>
+            </div>
+          </div>
+
+          <!-- Table View Container -->
+          <div id="squeue-table-container" class="overflow-x-auto max-h-64 overflow-y-auto rounded-xl border border-slate-800/80 bg-slate-950/60 font-mono text-xs">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-slate-900/90 text-slate-400 text-[10px] uppercase tracking-wider sticky top-0 border-b border-slate-800">
+                <tr>
+                  <th class="p-2.5">JobID</th>
+                  <th class="p-2.5">Partition</th>
+                  <th class="p-2.5">Job Name</th>
+                  <th class="p-2.5">User</th>
+                  <th class="p-2.5 text-center">ST</th>
+                  <th class="p-2.5">Time</th>
+                  <th class="p-2.5 text-center">Nodes</th>
+                  <th class="p-2.5">NodeList</th>
+                </tr>
+              </thead>
+              <tbody id="squeue-tbody" class="divide-y divide-slate-800/60 text-[11px] text-slate-300">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Raw CLI View Container -->
+          <pre id="squeue-raw-container" class="hidden p-3 rounded-xl border border-slate-800/80 bg-slate-950 text-blue-400 font-mono text-xs max-h-64 overflow-y-auto overflow-x-auto whitespace-pre leading-relaxed"></pre>
+        </div>
+
+        <!-- Footer / Summary -->
+        <div class="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+          <div class="flex items-center space-x-3 text-[11px]">
+            <span class="flex items-center space-x-1">
+              <span class="px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">R</span>
+              <span>Running</span>
+            </span>
+            <span class="flex items-center space-x-1">
+              <span class="px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 border border-amber-800 text-[10px] font-bold">PD</span>
+              <span>Pending</span>
+            </span>
+          </div>
+          <span class="text-[10px] text-slate-500 font-mono">Streaming 7s via SSH</span>
         </div>
       </div>
-    </section>
 
-    <!-- NODE SELECTOR TABS -->
-    <section>
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-        <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Select Cluster Node</h3>
-        <span class="text-xs text-slate-500">Click a node to view its availability schedule</span>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3" id="node-selector">
-        <!-- Node 10 -->
-        <button class="node-btn group p-4 rounded-xl border text-left transition relative bg-slate-900 border-blue-500 shadow-md shadow-blue-500/10 ring-1 ring-blue-500" data-node="node-10">
-          <div class="flex items-center justify-between mb-1">
-            <span class="font-bold text-white group-hover:text-blue-400 transition">Node 10</span>
-            <span class="text-[11px] px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-medium">Exclusive</span>
-          </div>
-          <p class="text-xs text-slate-400">64 Cores AMD EPYC, 256GB RAM</p>
-          <div class="mt-2 text-[11px] text-slate-500 flex items-center space-x-1.5">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span>Dedicated Single-Tenant</span>
-          </div>
-        </button>
-
-        <!-- Nodes 8 & 12 -->
-        <button class="node-btn group p-4 rounded-xl border text-left transition relative bg-slate-900/60 border-slate-800 hover:border-slate-700" data-node="nodes-8-12">
-          <div class="flex items-center justify-between mb-1">
-            <span class="font-bold text-white group-hover:text-blue-400 transition">Nodes 8 & 12</span>
-            <span class="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">MPI Cluster</span>
-          </div>
-          <p class="text-xs text-slate-400">2x 48 Cores Intel Xeon, InfiniBand</p>
-          <div class="mt-2 text-[11px] text-slate-500 flex items-center space-x-1.5">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span>Distributed MPI Workloads</span>
-          </div>
-        </button>
-
-        <!-- Node 7 GPU -->
-        <button class="node-btn group p-4 rounded-xl border text-left transition relative bg-slate-900/60 border-slate-800 hover:border-slate-700" data-node="node-7-gpu">
-          <div class="flex items-center justify-between mb-1">
-            <span class="font-bold text-white group-hover:text-blue-400 transition">Node 7 (GPU)</span>
-            <span class="text-[11px] px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 font-medium">4x A100</span>
-          </div>
-          <p class="text-xs text-slate-400">32 Cores, 4x NVIDIA A100 80GB VRAM</p>
-          <div class="mt-2 text-[11px] text-slate-500 flex items-center space-x-1.5">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span>AI / Deep Learning Workloads</span>
-          </div>
-        </button>
-      </div>
     </section>
 
     <!-- CALENDAR & TIME SLOT SCHEDULE -->
     <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
       
-      <!-- Date navigation header -->
-      <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-4">
-        <div>
-          <h3 id="current-node-title" class="text-lg font-bold text-white">Slot Availability: Node 10</h3>
-          <p id="current-date-readable" class="text-sm text-blue-400 font-medium mt-0.5">Thursday, Oct 22, 2026</p>
+      <!-- Month navigation header -->
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between pb-4 border-b border-slate-800 gap-4">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 id="calendar-header-title" class="text-lg font-bold text-white">Monthly Schedule: Node 1</h3>
+              <span id="calendar-month-badge" class="px-2 py-0.5 rounded text-xs font-semibold bg-blue-950 text-blue-300 border border-blue-800">
+                Full Month View
+              </span>
+            </div>
+            <p id="current-month-display" class="text-sm text-blue-400 font-medium mt-0.5">October 2026</p>
+          </div>
+
+          <!-- Compact Cluster Node Selector Dropdown -->
+          <div class="flex items-center space-x-2 sm:ml-4 bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800">
+            <label for="calendar-node-selector" class="text-xs font-semibold text-slate-400">Node:</label>
+            <select id="calendar-node-selector" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-100 font-semibold focus:outline-none focus:border-blue-500 cursor-pointer">
+              <option value="node-1">Node 1 (Shared Compute - 64c)</option>
+              <option value="node-2">Node 2 (Shared Compute - 64c)</option>
+              <option value="node-3">Node 3 (Shared Compute - 64c)</option>
+              <option value="node-4">Node 4 (Shared Compute - 64c)</option>
+              <option value="node-5">Node 5 (Shared Compute - 64c)</option>
+              <option value="node-6">Node 6 (Shared Compute - 64c)</option>
+              <option value="node-7">Node 7 (GPU Node - 64c + 4x A100)</option>
+              <option value="node-9">Node 9 (Shared Compute - 64c)</option>
+              <option value="node-11">Node 11 (Shared Compute - 64c)</option>
+            </select>
+          </div>
         </div>
 
-        <!-- Date navigation controls -->
+        <!-- Month Navigation & View Controls -->
         <div class="flex flex-wrap items-center gap-2">
-          <!-- Previous day -->
-          <button id="btn-prev-day" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <!-- Prev Month -->
+          <button id="btn-prev-month" title="Previous Month" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium flex items-center space-x-1 transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
             </svg>
+            <span class="hidden sm:inline">Prev Month</span>
           </button>
 
-          <!-- Today shortcut -->
-          <button id="btn-today" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-300 hover:text-white transition">
-            Today
+          <!-- Current Month (Today) -->
+          <button id="btn-month-today" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-300 hover:text-white transition">
+            Current Month
           </button>
 
-          <!-- Tomorrow shortcut -->
-          <button id="btn-tomorrow" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-300 hover:text-white transition">
-            Tomorrow
-          </button>
-
-          <!-- Next day -->
-          <button id="btn-next-day" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <!-- Next Month -->
+          <button id="btn-next-month" title="Next Month" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium flex items-center space-x-1 transition">
+            <span class="hidden sm:inline">Next Month</span>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
           </button>
 
-          <!-- Native date picker -->
-          <div class="relative">
-            <input type="date" id="date-picker-input" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 transition cursor-pointer">
+          <!-- Month Selector -->
+          <input type="month" id="month-picker-input" class="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 transition cursor-pointer">
+
+          <!-- View Mode Switcher -->
+          <div class="flex rounded-lg bg-slate-950 border border-slate-800 p-0.5 ml-1">
+            <button id="btn-view-month" class="px-3 py-1 rounded-md text-xs font-semibold bg-blue-600 text-white transition">
+              Month Grid
+            </button>
+            <button id="btn-view-day" class="px-3 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-slate-200 transition">
+              Day Detail
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- Slots Grid -->
-      <div id="slots-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <!-- Dynamically rendered via calendar.js / main.js -->
+      <!-- Monthly Utilization & Stats Overview Strip -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 text-xs">
+        <div>
+          <span class="text-slate-400 block text-[11px]">Total Slots This Month</span>
+          <span id="stat-month-total" class="font-bold text-slate-200 text-sm">-- slots</span>
+        </div>
+        <div>
+          <span class="text-slate-400 block text-[11px]">Available Slots</span>
+          <span id="stat-month-avail" class="font-bold text-emerald-400 text-sm">-- available</span>
+        </div>
+        <div>
+          <span class="text-slate-400 block text-[11px]">Booked Reservations</span>
+          <span id="stat-month-booked" class="font-bold text-blue-400 text-sm">-- booked</span>
+        </div>
+        <div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400 text-[11px]">Utilization</span>
+            <span id="stat-month-util" class="font-bold text-indigo-400 text-[11px]">0.0%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-1.5 mt-1.5">
+            <div id="stat-month-bar" class="bg-indigo-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MONTHLY CALENDAR GRID VIEW CONTAINER -->
+      <div id="month-view-container" class="space-y-2">
+        <!-- 7-Day Header -->
+        <div class="grid grid-cols-7 gap-2 text-center text-xs font-bold text-slate-400 uppercase tracking-wider py-1 border-b border-slate-800">
+          <div>Sun</div>
+          <div>Mon</div>
+          <div>Tue</div>
+          <div>Wed</div>
+          <div>Thu</div>
+          <div>Fri</div>
+          <div>Sat</div>
+        </div>
+
+        <!-- 35/42-Day Monthly Grid -->
+        <div id="monthly-calendar-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
+          <!-- Dynamically populated day cells -->
+        </div>
+      </div>
+
+      <!-- DAILY DETAIL VIEW CONTAINER (Hidden by default, shown when toggled) -->
+      <div id="day-view-container" class="space-y-4 hidden">
+        <div class="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+          <div>
+            <span class="text-xs text-slate-400">Inspecting Day:</span>
+            <h4 id="day-view-date-title" class="text-base font-bold text-white">Thursday, Oct 22, 2026</h4>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button id="btn-day-prev" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+            </button>
+            <input type="date" id="day-view-date-picker" class="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200">
+            <button id="btn-day-next" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+            </button>
+            <button id="btn-back-to-month" class="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold ml-2">
+              Back to Month View
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 Large Day Slots -->
+        <div id="slots-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Rendered dynamically -->
+        </div>
       </div>
 
       <!-- Slurm Batch Command Generator & Helper Footer -->
       <div class="mt-6 pt-4 border-t border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between text-xs text-slate-400 gap-3">
-        <div class="flex items-center space-x-2">
-          <span class="inline-block w-2.5 h-2.5 rounded bg-emerald-500"></span>
-          <span>Available</span>
-          <span class="inline-block w-2.5 h-2.5 rounded bg-blue-600 ml-3"></span>
-          <span>Booked by Faculty</span>
-          <span class="inline-block w-2.5 h-2.5 rounded bg-purple-600 ml-3"></span>
-          <span>Active Compute</span>
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center space-x-1.5">
+            <span class="inline-block w-2.5 h-2.5 rounded bg-emerald-500"></span>
+            <span>Available Slot (Click to Book)</span>
+          </div>
+          <div class="flex items-center space-x-1.5">
+            <span class="inline-block w-2.5 h-2.5 rounded bg-blue-600"></span>
+            <span>Booked (Click to Modify / Delete)</span>
+          </div>
+          <div class="flex items-center space-x-1.5">
+            <span class="inline-block w-2.5 h-2.5 rounded ring-2 ring-blue-500"></span>
+            <span>Current Day</span>
+          </div>
         </div>
         <div class="text-slate-500">
-          Tip: Bookings automatically commit to your GitHub repository <code class="text-slate-300">bookings.json</code>.
+          Faculty changes are committed directly to your repository's <code class="text-slate-300">bookings.json</code>.
         </div>
       </div>
 
@@ -309,10 +420,26 @@
       </div>
 
       <form id="booking-form" class="space-y-4">
-        <!-- Faculty Name -->
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-1">Faculty Member / Researcher Name *</label>
-          <input type="text" id="input-faculty-name" required placeholder="e.g. Dr. Jane Doe" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500">
+        <!-- User Name & Role -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">User Full Name *</label>
+            <input type="text" id="input-faculty-name" required placeholder="e.g. Dr. Jane Doe or Alex Smith" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">User Category / Role *</label>
+            <select id="input-faculty-role" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+              <option value="Faculty Member">Faculty Member</option>
+              <option value="Research Scholar / Student">Research Scholar / Student</option>
+              <option value="Technical / Dept Staff">Technical / Dept Staff</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Shared Node Notice Banner -->
+        <div id="booking-node-notice" class="p-2.5 rounded-lg text-xs bg-slate-950 border border-slate-800 text-slate-300 flex items-center space-x-2">
+          <span class="text-blue-400">ℹ</span>
+          <span id="booking-node-policy">All nodes feature 64 cores. Nodes 9 & 11 are shared across faculty, students & staff.</span>
         </div>
 
         <!-- University Email -->
@@ -366,36 +493,117 @@
     </div>
   </div>
 
-  <!-- DETAILS & CANCEL MODAL -->
-  <div id="details-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+  <!-- MANAGE / MODIFY / DELETE MODAL -->
+  <div id="manage-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
       <div class="flex items-center justify-between pb-3 border-b border-slate-800">
-        <h3 class="text-base font-bold text-white">Slot Reservation Details</h3>
-        <button id="details-close-btn" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h3 class="text-base font-bold text-white">Manage Slot Reservation</h3>
+            <span class="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-300 border border-blue-700">
+              BOOKED
+            </span>
+          </div>
+          <p id="manage-slot-desc" class="text-xs text-blue-400 font-medium mt-0.5">Node 10 • Oct 22, 2026 • 09:00 - 13:00</p>
+        </div>
+        <button id="manage-close-btn" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
 
-      <div class="space-y-3 text-sm" id="details-modal-body">
-        <!-- Rendered dynamically -->
+      <!-- Booking Metadata Strip -->
+      <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs flex justify-between items-center">
+        <div>
+          <span class="text-slate-400 block text-[11px]">Reservation Timestamp</span>
+          <span id="manage-booked-at" class="font-medium text-slate-200">--</span>
+        </div>
+        <div class="text-right">
+          <span class="text-slate-400 block text-[11px]">Last Modified</span>
+          <span id="manage-modified-at" class="font-medium text-slate-300">Original Booking</span>
+        </div>
       </div>
 
-      <!-- Slurm Batch command snippet helper -->
-      <div class="bg-slate-950 p-3 rounded-lg border border-slate-800">
-        <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Slurm Quick Launch Command</div>
-        <code id="details-slurm-cmd" class="text-xs text-blue-300 font-mono block select-all">sbatch -w node-10 job.sh</code>
-      </div>
+      <!-- Form for Modifying Reservation -->
+      <form id="modify-form" class="space-y-3.5">
+        <!-- User Name & Role -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Researcher / User Name *</label>
+            <input type="text" id="modify-faculty-name" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">User Role *</label>
+            <select id="modify-faculty-role" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+              <option value="Faculty Member">Faculty Member</option>
+              <option value="Research Scholar / Student">Research Scholar / Student</option>
+              <option value="Technical / Dept Staff">Technical / Dept Staff</option>
+            </select>
+          </div>
+        </div>
 
-      <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
-        <button id="btn-release-slot" class="px-4 py-2 rounded-lg text-xs font-semibold bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 transition">
-          Release / Cancel Slot
-        </button>
-        <button id="btn-close-details" class="px-4 py-2 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition">
-          Close
-        </button>
-      </div>
+        <!-- Institutional Email -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Institutional Email *</label>
+          <input type="email" id="modify-faculty-email" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+        </div>
+
+        <!-- Department -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Department / Lab *</label>
+          <select id="modify-faculty-dept" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+            <option value="Computer Science & Engineering">Computer Science & Engineering</option>
+            <option value="Computational Biology & Bioinformatics">Computational Biology & Bioinformatics</option>
+            <option value="Aerospace & Mechanical Engineering">Aerospace & Mechanical Engineering</option>
+            <option value="Physics & Astronomy">Physics & Astronomy</option>
+            <option value="Electrical & Computer Engineering">Electrical & Computer Engineering</option>
+            <option value="Chemistry & Materials Science">Chemistry & Materials Science</option>
+            <option value="Other Department">Other Department</option>
+          </select>
+        </div>
+
+        <!-- Workload Purpose -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Workload / Slurm Job Purpose *</label>
+          <input type="text" id="modify-job-name" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+        </div>
+
+        <!-- Resources -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Resource Allocation</label>
+          <input type="text" id="modify-resources" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+        </div>
+
+        <!-- Slurm Launch Command snippet -->
+        <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+            <span class="font-semibold uppercase tracking-wider">Slurm Quick Launch Command</span>
+            <button type="button" id="btn-copy-slurm" class="text-blue-400 hover:text-blue-300 text-[11px]">Copy Command</button>
+          </div>
+          <code id="manage-slurm-cmd" class="text-xs text-blue-300 font-mono block select-all truncate">sbatch -w node-10 job.sh</code>
+        </div>
+
+        <!-- Action Buttons: Save Modification & Delete / Release -->
+        <div class="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <button type="button" id="btn-delete-slot" class="w-full sm:w-auto px-4 py-2 rounded-lg text-xs font-semibold bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 flex items-center justify-center space-x-1.5 transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <span>Delete / Release Booking</span>
+          </button>
+
+          <div class="flex items-center space-x-2 w-full sm:w-auto justify-end">
+            <button type="button" id="btn-cancel-modify" class="px-3 py-2 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition">
+              Close
+            </button>
+            <button type="submit" id="btn-save-modify" class="inline-flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/30 transition">
+              <span id="modify-spinner" class="hidden">
+                <svg class="animate-spin w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              </span>
+              <span id="modify-label">Save Modifications</span>
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -479,6 +687,83 @@
     </div>
   </div>
 
+  <!-- CLUSTER SSH LOGIN & LIVE FEED MODAL (10.206.4.128 - 7s Refresh) -->
+  <div id="ssh-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h3 class="text-base font-bold text-white">Cluster Live Feed (SSH)</h3>
+            <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">
+              7s Refresh
+            </span>
+          </div>
+          <p class="text-xs text-blue-400 font-medium mt-0.5">Target IP: 10.206.4.128 • Port 22</p>
+        </div>
+        <button id="ssh-close-btn" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-400">
+        Enter your cluster credentials to start streaming live telemetry (CPU load, RAM, Slurm active jobs, and GPU metrics) directly from <strong>10.206.4.128</strong> every 7 seconds.
+      </p>
+
+      <form id="ssh-login-form" class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Cluster IP Address</label>
+          <input type="text" id="input-ssh-host" value="10.206.4.128" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-blue-500">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">SSH Port</label>
+            <input type="number" id="input-ssh-port" value="22" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Fetch Refresh</label>
+            <input type="text" value="7 seconds" disabled class="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-400 font-mono">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Cluster SSH Username *</label>
+          <input type="text" id="input-ssh-user" required placeholder="e.g. username" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Cluster SSH Password *</label>
+          <input type="password" id="input-ssh-password" required placeholder="••••••••••••" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500 font-mono">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Local Telemetry Bridge URL</label>
+          <input type="text" id="input-ssh-bridge-url" value="http://localhost:8080" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 font-mono focus:outline-none focus:border-blue-500">
+          <p class="text-[11px] text-slate-500 mt-1">Start bridge via: <code class="text-blue-400">python telemetry-bridge.py</code></p>
+        </div>
+
+        <div id="ssh-status-box" class="p-3 rounded-lg text-xs hidden"></div>
+
+        <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
+          <button type="button" id="btn-disconnect-ssh" class="px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:bg-red-950/40 transition">
+            Disconnect
+          </button>
+          <div class="flex space-x-2">
+            <button type="button" id="btn-close-ssh" class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition">
+              Cancel
+            </button>
+            <button type="submit" id="btn-submit-ssh" class="inline-flex items-center space-x-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30 transition">
+              <span id="ssh-spinner" class="hidden">
+                <svg class="animate-spin w-3 h-3 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              </span>
+              <span id="ssh-btn-label">Connect & Stream (7s)</span>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
 
@@ -489,7 +774,7 @@
     </div>
   </footer>
 
-  <!-- APPLICATION ENTRY SCRIPT -->
-  <script type="module" src="./src/main.js"></script>
+  <!-- APPLICATION ENTRY SCRIPT (Works directly on file://, localhost, and GitHub Pages) -->
+  <script src="./app.js"></script>
 </body>
 </html>

@@ -1,98 +1,60 @@
 {
   "version": "1.0",
-  "lastUpdated": "2026-10-22T08:00:00Z",
+  "lastUpdated": "2026-10-22T00:00:00Z",
   "nodes": {
-    "node-10": {
-      "name": "Node 10 (Exclusive Compute)",
-      "specs": "64 Cores AMD EPYC, 256GB RAM, Dual 100GbE",
-      "slots": {
-        "2026-10-22": {
-          "09:00-13:00": {
-            "status": "Booked",
-            "bookedBy": "Dr. Sarah Chen",
-            "department": "Computational Biology",
-            "email": "sarah.chen@university.edu",
-            "jobName": "Genomic Sequence Alignment",
-            "bookedAt": "2026-10-21T14:30:00Z"
-          },
-          "13:00-17:00": {
-            "status": "Available"
-          },
-          "17:00-21:00": {
-            "status": "Available"
-          },
-          "21:00-09:00": {
-            "status": "Booked",
-            "bookedBy": "Prof. Alan Turing",
-            "department": "Computer Science",
-            "email": "alan.t@university.edu",
-            "jobName": "Overnight Deep RL Batch Run",
-            "bookedAt": "2026-10-20T10:15:00Z"
-          }
-        },
-        "2026-10-23": {
-          "09:00-13:00": { "status": "Available" },
-          "13:00-17:00": { "status": "Available" },
-          "17:00-21:00": { "status": "Available" },
-          "21:00-09:00": { "status": "Available" }
-        },
-        "2026-10-24": {
-          "09:00-13:00": { "status": "Available" },
-          "13:00-17:00": { "status": "Available" },
-          "17:00-21:00": { "status": "Available" },
-          "21:00-09:00": { "status": "Available" }
-        }
-      }
+    "node-1": {
+      "name": "Node 1 (Shared Compute)",
+      "specs": "64 Cores CPU, 256GB RAM (Shared across Faculty, Students, Staff)",
+      "category": "shared",
+      "slots": {}
     },
-    "nodes-8-12": {
-      "name": "Nodes 8 & 12 (MPI Cluster)",
-      "specs": "2x 48 Cores Intel Xeon, 192GB RAM, InfiniBand HDR",
-      "slots": {
-        "2026-10-22": {
-          "09:00-13:00": { "status": "Available" },
-          "13:00-17:00": {
-            "status": "Booked",
-            "bookedBy": "Dr. Marcus Vance",
-            "department": "Aerospace Engineering",
-            "email": "m.vance@university.edu",
-            "jobName": "Turbulent CFD Simulation (OpenFOAM)",
-            "bookedAt": "2026-10-22T08:10:00Z"
-          },
-          "17:00-21:00": { "status": "Available" },
-          "21:00-09:00": { "status": "Available" }
-        },
-        "2026-10-23": {
-          "09:00-13:00": { "status": "Available" },
-          "13:00-17:00": { "status": "Available" },
-          "17:00-21:00": { "status": "Available" },
-          "21:00-09:00": { "status": "Available" }
-        }
-      }
+    "node-2": {
+      "name": "Node 2 (Shared Compute)",
+      "specs": "64 Cores CPU, 256GB RAM (Shared across Faculty, Students, Staff)",
+      "category": "shared",
+      "slots": {}
     },
-    "node-7-gpu": {
+    "node-3": {
+      "name": "Node 3 (Shared Compute)",
+      "specs": "64 Cores CPU, 256GB RAM (Shared across Faculty, Students, Staff)",
+      "category": "shared",
+      "slots": {}
+    },
+    "node-4": {
+      "name": "Node 4 (Shared Compute)",
+      "specs": "64 Cores CPU, 256GB RAM (Shared across Faculty, Students, Staff)",
+      "category": "shared",
+      "slots": {}
+    },
+    "node-5": {
+      "name": "Node 5 (Shared Compute)",
+      "specs": "64 Cores CPU, 256GB RAM (Shared across Faculty, Students, Staff)",
+      "category": "shared",
+      "slots": {}
+    },
+    "node-6": {
+      "name": "Node 6 (Shared Compute)",
+      "specs": "64 Cores CPU, 256GB RAM (Shared across Faculty, Students, Staff)",
+      "category": "shared",
+      "slots": {}
+    },
+    "node-7": {
       "name": "Node 7 (GPU Acceleration)",
-      "specs": "4x NVIDIA A100 80GB, 32 Cores AMD EPYC, 512GB RAM",
-      "slots": {
-        "2026-10-22": {
-          "09:00-13:00": {
-            "status": "Booked",
-            "bookedBy": "Prof. Elena Rostova",
-            "department": "AI & Robotics",
-            "email": "elena.r@university.edu",
-            "jobName": "Transformer Foundation Model Fine-Tuning",
-            "bookedAt": "2026-10-21T19:00:00Z"
-          },
-          "13:00-17:00": { "status": "Available" },
-          "17:00-21:00": { "status": "Available" },
-          "21:00-09:00": { "status": "Available" }
-        },
-        "2026-10-23": {
-          "09:00-13:00": { "status": "Available" },
-          "13:00-17:00": { "status": "Available" },
-          "17:00-21:00": { "status": "Available" },
-          "21:00-09:00": { "status": "Available" }
-        }
-      }
+      "specs": "64 Cores CPU, 512GB RAM, 4x NVIDIA A100 80GB",
+      "category": "gpu",
+      "slots": {}
+    },
+    "node-9": {
+      "name": "Node 9 (Shared Compute)",
+      "specs": "64 Cores CPU, 256GB RAM (Shared across Faculty, Students, Staff)",
+      "category": "shared",
+      "slots": {}
+    },
+    "node-11": {
+      "name": "Node 11 (Shared Compute)",
+      "specs": "64 Cores CPU, 256GB RAM (Shared across Faculty, Students, Staff)",
+      "category": "shared",
+      "slots": {}
     }
   }
 }

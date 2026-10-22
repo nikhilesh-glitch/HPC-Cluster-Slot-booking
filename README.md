@@ -6,25 +6,33 @@ A lightweight, zero-maintenance, serverless Single-Page Application (SPA) design
 
 ## 🌟 Key Features
 
+- **Full Monthly Calendar Display**: Visualizes all 30/31 days of the month at once in an interactive 7-column calendar grid showing all shift blocks and cluster occupancy.
+- **Complete Booking Lifecycle**:
+  - **Book Available Slots**: Reserve any open shift with one click.
+  - **Modify Existing Bookings**: Edit researcher details, email, department, job description, and resource demands.
+  - **Delete / Release Bookings**: Cancel reservations and immediately return slots to available status for other faculty.
 - **Zero-Server Infrastructure**: Runs 100% on the client side via static HTML/Tailwind CSS/ES Modules hosted on free GitHub Pages with HTTPS.
 - **GitHub API Persistence**: Reads and commits reservation updates directly to `bookings.json` in your repository using the GitHub Contents REST API.
-- **Live Cluster Telemetry**: Real-time telemetry monitoring for compute nodes:
-  - CPU Core Utilization & Load
-  - Memory (RAM) Allocation
-  - Thermal & Power Draw
-  - Multi-GPU metrics (NVIDIA A100 VRAM, Load %, Temperature)
-  - Active Slurm Queue & Job telemetry
-- **Multi-Node Partitioning**:
-  - **Node 10**: Exclusive Single-Tenant Compute (64 Cores AMD EPYC, 256GB RAM)
-  - **Nodes 8 & 12**: Distributed MPI Cluster (96 Cores Intel Xeon, InfiniBand HDR)
-  - **Node 7 (GPU)**: Dense Deep Learning Node (4x NVIDIA A100 80GB SXM4)
+- **Dual Slurm Operations Center (Left: `sinfo`, Right: `squeue`)**:
+  - **Left Panel (`sinfo`)**: Real-time partition and node availability view (`compute*` & `gpu`), state badges (`idle`, `mix`, `alloc`, `down`), node counts, dedicated **"Fetch Live"** button, and raw CLI terminal output toggle.
+  - **Right Panel (`squeue`)**: Live job queue monitor displaying active and pending jobs, JobID, partition, job name, user, state (`R` running, `PD` pending), elapsed time, node counts, nodelist assignments, dedicated **"Fetch Live"** button, and raw CLI toggle.
+- **Live Cluster Telemetry & SSH Feed (10.206.4.128)**:
+  - Real-time SSH streaming with a **7-second refresh interval**
+  - Prompts for SSH username and password via a secure modal
+  - Connects to cluster IP `10.206.4.128:22` via local CORS bridge (`telemetry-bridge.py`)
+  - Live Slurm queue (`squeue`) and node states (`sinfo`), CPU load from `uptime`, RAM from `free -m`, and GPU telemetry from `nvidia-smi`
+- **Multi-Node Partitioning (All 64 Cores Each)**:
+  - **Nodes 1 to 6**: Shared Department Compute Nodes (64 Cores CPU each, shared across faculty, students, and staff)
+  - **Node 7 (GPU)**: GPU Compute Node (64 Cores + 4x NVIDIA A100 80GB)
+  - **Nodes 9 & 11**: Shared Department Compute Nodes (64 Cores CPU each, shared across faculty, students, and staff)
+  - All jobs submitted on these nodes exclusively
 - **Flexible Time Slots**:
   - Morning Block: `09:00 - 13:00` (4 hrs)
   - Afternoon Block: `13:00 - 17:00` (4 hrs)
   - Evening Block: `17:00 - 21:00` (4 hrs)
   - Overnight Batch: `21:00 - 09:00` (12 hrs)
-- **Slurm Script Generator**: Automatically constructs quick-launch `sbatch` and `salloc` commands corresponding to reserved node parameters.
-- **Offline & Local Demo Mode**: Works immediately in demo mode with browser storage caching if no GitHub PAT is supplied.
+- **Month Utilization Analytics**: Real-time stats showing total slots, available slots, booked slots, and node utilization percentage for the month.
+- **Slurm Script Generator**: Automatically constructs quick-launch `sbatch` commands with a one-click clipboard copy.
 
 ---
 
@@ -61,6 +69,28 @@ Open [http://localhost:8000](http://localhost:8000) in your browser.
 npm install
 npm run dev
 ```
+
+---
+
+## 📡 Live Cluster Feed (SSH to 10.206.4.128 - 7s Refresh)
+
+To stream live hardware metrics and active Slurm jobs directly from cluster node `10.206.4.128`:
+
+1. **Launch the local SSH bridge**:
+   ```bash
+   python telemetry-bridge.py
+   ```
+   The bridge runs a lightweight CORS HTTP server on `http://localhost:8080`.
+
+2. **Connect in the Web Portal**:
+   - Click the **Live Feed: 10.206.4.128** badge in the top navigation bar.
+   - Enter your cluster **SSH Username** and **Password** in the prompt.
+   - Click **Connect & Stream (7s)**.
+
+3. **Real-time Monitoring**:
+   - Telemetry automatically refreshes **every 7 seconds**.
+   - Displays real CPU load percentage from `uptime`, RAM usage from `free -m`, active jobs from `squeue`, and GPU metrics from `nvidia-smi`.
+   - Click the badge at any time to inspect connection health or disconnect.
 
 ---
 
@@ -117,10 +147,12 @@ Now, whenever a slot is booked or released, a Git commit is created directly aga
 
 ## 🛡️ Faculty Workflows
 
-1. **Viewing Schedule**: Select a cluster node tab and navigate dates with the date picker or "Today" / "Tomorrow" buttons.
-2. **Reserving a Slot**: Click **Book This Slot** on any green card, provide researcher name, email, department, and compute workload details.
-3. **Releasing a Slot**: Click **View Details & Cancel** on a booked card and select **Release / Cancel Slot**.
-4. **Copying Slurm Command**: The reservation details modal provides a customized `sbatch` launch command ready to paste into your cluster terminal.
+1. **Viewing Monthly Schedule**: See all 30/31 days and their 4 shift slots at once on the interactive 7-column calendar grid. Switch months via `Prev Month`, `Next Month`, `Current Month`, or the month picker.
+2. **Reserving a Slot**: Click `+ Book` on any open slot chip (Morning, Afternoon, Evening, Overnight) to open the reservation dialog and reserve instantly.
+3. **Modifying a Booking**: Click on any booked slot chip (`EDIT`) to open the management modal, update researcher details, job purpose, or allocated resources, and save the changes.
+4. **Deleting / Releasing a Slot**: In the management modal, click `Delete / Release Booking` to cancel the reservation and return the slot back to `Available`.
+5. **Inspecting a Single Day**: Click any day number or toggle `Day Detail` mode to view high-resolution shift cards.
+6. **Copying Slurm Command**: The reservation details modal provides a customized `sbatch` launch command ready to paste into your cluster terminal.
 
 ---
 
