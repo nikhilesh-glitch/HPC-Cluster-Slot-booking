@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HPC Cluster Slot Booking & Telemetry Portal</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes pulse-subtle {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .animate-pulse-subtle {
+      animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-blue-600 selection:text-white">
+
+  <!-- TOP NAVBAR -->
+  <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <!-- Cluster Logo & Title -->
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-700 flex items-center justify-center shadow-lg shadow-blue-500/20 text-white font-black text-lg">
+          HPC
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-base sm:text-lg font-bold tracking-tight text-white">Cluster Slot Booking & Telemetry</h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-950 text-blue-400 border border-blue-800">
+              v1.0 SPA
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">GitHub Pages Native • Zero Backend Infrastructure</p>
+        </div>
+      </div>
+
+      <!-- Right Action / Status Area -->
+      <div class="flex items-center space-x-3">
+        <!-- Sync Status Pill -->
+        <button id="sync-status-btn" class="flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-800 border border-slate-700 hover:border-slate-600 transition">
+          <span id="sync-indicator" class="h-2 w-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span id="sync-label" class="text-slate-300">Local Mode</span>
+        </button>
+
+        <!-- Refresh Button -->
+        <button id="btn-refresh" title="Reload from GitHub" class="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+
+        <!-- Settings / Login Button -->
+        <button id="btn-open-settings" class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/30 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span id="btn-auth-text">Settings & PAT</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN WRAPPER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full space-y-6">
+
+    <!-- TELEMETRY & NODE METRICS DASHBOARD -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between pb-4 mb-4 border-b border-slate-800 gap-4">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 rounded-lg bg-emerald-950/60 border border-emerald-800/50 text-emerald-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h2 id="telemetry-node-title" class="text-base font-bold text-white">Node 10 Live Telemetry</h2>
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-950 text-emerald-400 border border-emerald-800">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5 animate-pulse"></span>
+                ONLINE
+              </span>
+            </div>
+            <p id="telemetry-node-specs" class="text-xs text-slate-400 mt-0.5">64 Cores AMD EPYC • 256GB DDR4 RAM • 3.84TB NVMe</p>
+          </div>
+        </div>
+
+        <!-- Telemetry Timestamp -->
+        <div class="text-xs text-slate-400 flex items-center space-x-2 self-start lg:self-auto">
+          <span>Last telemetry probe: <strong id="telemetry-time" class="text-slate-200">--:--:--</strong></span>
+          <span class="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse-subtle"></span>
+        </div>
+      </div>
+
+      <!-- Real-time metrics grid -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <!-- CPU Gauge -->
+        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
+            <span>CPU Load</span>
+            <span id="telemetry-cpu-val" class="font-bold text-blue-400">88.4%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2">
+            <div id="telemetry-cpu-bar" class="bg-blue-500 h-2 rounded-full transition-all duration-500" style="width: 88.4%"></div>
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1.5">64 Cores Active</div>
+        </div>
+
+        <!-- Memory Gauge -->
+        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
+            <span>Memory (RAM)</span>
+            <span id="telemetry-ram-val" class="font-bold text-indigo-400">214 / 256 GB</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2">
+            <div id="telemetry-ram-bar" class="bg-indigo-500 h-2 rounded-full transition-all duration-500" style="width: 84%"></div>
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1.5">84% Allocated</div>
+        </div>
+
+        <!-- Power & Temp -->
+        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-2">
+            <span>Thermal / Power</span>
+            <span id="telemetry-temp-val" class="font-bold text-amber-400">54°C • 420W</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2">
+            <div id="telemetry-temp-bar" class="bg-amber-500 h-2 rounded-full transition-all duration-500" style="width: 55%"></div>
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1.5">Nominal Operating Temp</div>
+        </div>
+
+        <!-- Slurm Active Workload -->
+        <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-xs text-slate-400">
+            <span>Slurm Workload</span>
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">RUNNING</span>
+          </div>
+          <div id="telemetry-job-info" class="text-xs font-medium text-slate-200 truncate mt-1">
+            GATK_haplotype_caller.sh
+          </div>
+          <div id="telemetry-job-user" class="text-[11px] text-slate-400">
+            Dr. Sarah Chen (Elapsed: 03:12:45)
+          </div>
+        </div>
+      </div>
+
+      <!-- GPU Card Section (Only visible when GPU node is active) -->
+      <div id="telemetry-gpu-container" class="mt-4 pt-4 border-t border-slate-800 hidden">
+        <h4 class="text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">NVIDIA A100 GPU Acceleration Metrics</h4>
+        <div id="telemetry-gpu-grid" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </section>
+
+    <!-- NODE SELECTOR TABS -->
+    <section>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Select Cluster Node</h3>
+        <span class="text-xs text-slate-500">Click a node to view its availability schedule</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3" id="node-selector">
+        <!-- Node 10 -->
+        <button class="node-btn group p-4 rounded-xl border text-left transition relative bg-slate-900 border-blue-500 shadow-md shadow-blue-500/10 ring-1 ring-blue-500" data-node="node-10">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-bold text-white group-hover:text-blue-400 transition">Node 10</span>
+            <span class="text-[11px] px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-medium">Exclusive</span>
+          </div>
+          <p class="text-xs text-slate-400">64 Cores AMD EPYC, 256GB RAM</p>
+          <div class="mt-2 text-[11px] text-slate-500 flex items-center space-x-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>Dedicated Single-Tenant</span>
+          </div>
+        </button>
+
+        <!-- Nodes 8 & 12 -->
+        <button class="node-btn group p-4 rounded-xl border text-left transition relative bg-slate-900/60 border-slate-800 hover:border-slate-700" data-node="nodes-8-12">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-bold text-white group-hover:text-blue-400 transition">Nodes 8 & 12</span>
+            <span class="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">MPI Cluster</span>
+          </div>
+          <p class="text-xs text-slate-400">2x 48 Cores Intel Xeon, InfiniBand</p>
+          <div class="mt-2 text-[11px] text-slate-500 flex items-center space-x-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>Distributed MPI Workloads</span>
+          </div>
+        </button>
+
+        <!-- Node 7 GPU -->
+        <button class="node-btn group p-4 rounded-xl border text-left transition relative bg-slate-900/60 border-slate-800 hover:border-slate-700" data-node="node-7-gpu">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-bold text-white group-hover:text-blue-400 transition">Node 7 (GPU)</span>
+            <span class="text-[11px] px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 font-medium">4x A100</span>
+          </div>
+          <p class="text-xs text-slate-400">32 Cores, 4x NVIDIA A100 80GB VRAM</p>
+          <div class="mt-2 text-[11px] text-slate-500 flex items-center space-x-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>AI / Deep Learning Workloads</span>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <!-- CALENDAR & TIME SLOT SCHEDULE -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+      
+      <!-- Date navigation header -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-4">
+        <div>
+          <h3 id="current-node-title" class="text-lg font-bold text-white">Slot Availability: Node 10</h3>
+          <p id="current-date-readable" class="text-sm text-blue-400 font-medium mt-0.5">Thursday, Oct 22, 2026</p>
+        </div>
+
+        <!-- Date navigation controls -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Previous day -->
+          <button id="btn-prev-day" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          <!-- Today shortcut -->
+          <button id="btn-today" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-300 hover:text-white transition">
+            Today
+          </button>
+
+          <!-- Tomorrow shortcut -->
+          <button id="btn-tomorrow" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-300 hover:text-white transition">
+            Tomorrow
+          </button>
+
+          <!-- Next day -->
+          <button id="btn-next-day" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          <!-- Native date picker -->
+          <div class="relative">
+            <input type="date" id="date-picker-input" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 transition cursor-pointer">
+          </div>
+        </div>
+      </div>
+
+      <!-- Slots Grid -->
+      <div id="slots-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Dynamically rendered via calendar.js / main.js -->
+      </div>
+
+      <!-- Slurm Batch Command Generator & Helper Footer -->
+      <div class="mt-6 pt-4 border-t border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between text-xs text-slate-400 gap-3">
+        <div class="flex items-center space-x-2">
+          <span class="inline-block w-2.5 h-2.5 rounded bg-emerald-500"></span>
+          <span>Available</span>
+          <span class="inline-block w-2.5 h-2.5 rounded bg-blue-600 ml-3"></span>
+          <span>Booked by Faculty</span>
+          <span class="inline-block w-2.5 h-2.5 rounded bg-purple-600 ml-3"></span>
+          <span>Active Compute</span>
+        </div>
+        <div class="text-slate-500">
+          Tip: Bookings automatically commit to your GitHub repository <code class="text-slate-300">bookings.json</code>.
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- BOOKING MODAL -->
+  <div id="booking-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h3 class="text-base font-bold text-white">Reserve HPC Slot</h3>
+          <p id="modal-slot-desc" class="text-xs text-blue-400 font-medium">Node 10 • Oct 22, 2026 • 09:00 - 13:00</p>
+        </div>
+        <button id="modal-close-btn" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <form id="booking-form" class="space-y-4">
+        <!-- Faculty Name -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Faculty Member / Researcher Name *</label>
+          <input type="text" id="input-faculty-name" required placeholder="e.g. Dr. Jane Doe" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500">
+        </div>
+
+        <!-- University Email -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Institutional Email *</label>
+          <input type="email" id="input-faculty-email" required placeholder="jane.doe@university.edu" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500">
+        </div>
+
+        <!-- Department -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Department / Lab *</label>
+          <select id="input-faculty-dept" required class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+            <option value="Computer Science & Engineering">Computer Science & Engineering</option>
+            <option value="Computational Biology & Bioinformatics">Computational Biology & Bioinformatics</option>
+            <option value="Aerospace & Mechanical Engineering">Aerospace & Mechanical Engineering</option>
+            <option value="Physics & Astronomy">Physics & Astronomy</option>
+            <option value="Electrical & Computer Engineering">Electrical & Computer Engineering</option>
+            <option value="Chemistry & Materials Science">Chemistry & Materials Science</option>
+            <option value="Other Department">Other Department</option>
+          </select>
+        </div>
+
+        <!-- Workload / Job Description -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Workload / Slurm Job Purpose *</label>
+          <input type="text" id="input-job-name" required placeholder="e.g. Quantum Monte Carlo or PyTorch Distributed" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500">
+        </div>
+
+        <!-- Cores / Resources Requested -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Estimated Resource Demand</label>
+          <input type="text" id="input-resources" placeholder="e.g. Full Node (64 cores, 256GB RAM)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500">
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="pt-3 border-t border-slate-800 flex items-center justify-end space-x-3">
+          <button type="button" id="modal-cancel-btn" class="px-4 py-2 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition">
+            Cancel
+          </button>
+          <button type="submit" id="modal-submit-btn" class="inline-flex items-center space-x-2 px-5 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition">
+            <span id="submit-btn-spinner" class="hidden">
+              <svg class="animate-spin w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </span>
+            <span id="submit-btn-label">Confirm Reservation</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- DETAILS & CANCEL MODAL -->
+  <div id="details-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="text-base font-bold text-white">Slot Reservation Details</h3>
+        <button id="details-close-btn" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-sm" id="details-modal-body">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Slurm Batch command snippet helper -->
+      <div class="bg-slate-950 p-3 rounded-lg border border-slate-800">
+        <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Slurm Quick Launch Command</div>
+        <code id="details-slurm-cmd" class="text-xs text-blue-300 font-mono block select-all">sbatch -w node-10 job.sh</code>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
+        <button id="btn-release-slot" class="px-4 py-2 rounded-lg text-xs font-semibold bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 transition">
+          Release / Cancel Slot
+        </button>
+        <button id="btn-close-details" class="px-4 py-2 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800 transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GITHUB SETTINGS & AUTH MODAL -->
+  <div id="settings-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h3 class="text-base font-bold text-white">GitHub API & Authentication Settings</h3>
+          <p class="text-xs text-slate-400">Enables cross-faculty synchronization via your GitHub Repository.</p>
+        </div>
+        <button id="settings-close-btn" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <form id="settings-form" class="space-y-4">
+        <!-- Personal Access Token (PAT) -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-semibold text-slate-300">GitHub Personal Access Token (PAT)</label>
+            <span class="text-[11px] text-blue-400 hover:underline cursor-pointer" onclick="window.open('https://github.com/settings/tokens?type=beta','_blank')">Generate Token ↗</span>
+          </div>
+          <input type="password" id="input-settings-token" placeholder="github_pat_... or ghp_..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500 font-mono">
+          <p class="text-[11px] text-slate-500 mt-1">Requires fine-grained token with <strong>Contents: Read and write</strong> permission on this repository.</p>
+        </div>
+
+        <!-- Repository Owner & Name -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Repo Owner (User/Org)</label>
+            <input type="text" id="input-settings-owner" placeholder="e.g. your-github-username" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Repository Name</label>
+            <input type="text" id="input-settings-repo" placeholder="e.g. hpc-booking-system" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+
+        <!-- Branch & File Path -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Branch</label>
+            <input type="text" id="input-settings-branch" value="main" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">File Path</label>
+            <input type="text" id="input-settings-path" value="bookings.json" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+
+        <!-- Faculty Profile Autofill Defaults -->
+        <div class="pt-3 border-t border-slate-800">
+          <h4 class="text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wider">Default Faculty Profile (Autofill)</h4>
+          <div class="grid grid-cols-2 gap-3 mb-2">
+            <input type="text" id="input-profile-name" placeholder="Full Name" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500">
+            <input type="email" id="input-profile-email" placeholder="Email Address" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500">
+          </div>
+        </div>
+
+        <!-- Test Connection Output -->
+        <div id="settings-status-box" class="p-3 rounded-lg text-xs hidden"></div>
+
+        <!-- Actions -->
+        <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
+          <div class="flex space-x-2">
+            <button type="button" id="btn-test-connection" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition">
+              Test Connection
+            </button>
+            <button type="button" id="btn-clear-settings" class="px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:bg-red-950/40 transition">
+              Clear Auth
+            </button>
+          </div>
+          <button type="submit" class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition">
+            Save Settings
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- FOOTER -->
+  <footer class="bg-slate-950 border-t border-slate-800 py-4 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
+      HPC Cluster Slot Booking & Telemetry System • Deployable directly to GitHub Pages • MIT License
+    </div>
+  </footer>
+
+  <!-- APPLICATION ENTRY SCRIPT -->
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
