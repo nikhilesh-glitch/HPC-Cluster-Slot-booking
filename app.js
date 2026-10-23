@@ -193,9 +193,15 @@ const AuthManager = {
   getProfile() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY_PROFILE);
-      return raw ? JSON.parse(raw) : { name: '', email: '', department: '', role: 'Faculty Member' };
+      const parsed = raw ? JSON.parse(raw) : {};
+      return {
+        name: parsed.name || '',
+        email: parsed.email || '',
+        department: 'Chemical Engineering',
+        role: parsed.role || 'Faculty Member'
+      };
     } catch {
-      return { name: '', email: '', department: '', role: 'Faculty Member' };
+      return { name: '', email: '', department: 'Chemical Engineering', role: 'Faculty Member' };
     }
   },
 
@@ -1469,7 +1475,7 @@ function openBookingModal(nodeId, dateStr, slotKey) {
   if (el.inputFacultyName) el.inputFacultyName.value = profile.name || '';
   if (el.inputFacultyRole && profile.role) el.inputFacultyRole.value = profile.role;
   if (el.inputFacultyEmail) el.inputFacultyEmail.value = profile.email || '';
-  if (el.inputFacultyDept && profile.department) el.inputFacultyDept.value = profile.department;
+  if (el.inputFacultyDept) el.inputFacultyDept.value = 'Chemical Engineering';
   if (el.inputJobName) el.inputJobName.value = '';
   if (el.inputResources) el.inputResources.value = `Full 64 Cores`;
 
@@ -1644,7 +1650,7 @@ function openManageModal(nodeId, dateStr, slotKey) {
   if (el.modifyFacultyName) el.modifyFacultyName.value = details.bookedBy || '';
   if (el.modifyFacultyRole && details.role) el.modifyFacultyRole.value = details.role;
   if (el.modifyFacultyEmail) el.modifyFacultyEmail.value = details.email || '';
-  if (el.modifyFacultyDept && details.department) el.modifyFacultyDept.value = details.department;
+  if (el.modifyFacultyDept) el.modifyFacultyDept.value = 'Chemical Engineering';
   if (el.modifyJobName) el.modifyJobName.value = details.jobName || '';
   if (el.modifyResources) el.modifyResources.value = details.coresRequested || '64 Cores';
 
