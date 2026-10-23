@@ -46,29 +46,103 @@ function base64ToUtf8(str) {
 // Authentication & Settings Manager
 // -------------------------------------------------------------
 const AuthManager = {
+  getDefaultOwner() {
+    if (typeof window !== 'undefined' && window.location.hostname.endsWith('github.io')) {
+      return window.location.hostname.split('.')[0];
+    }
+    return 'nikhilesh-glitch';
+  },
+
+  getDefaultRepo() {
+    if (typeof window !== 'undefined' && window.location.pathname) {
+      const parts = window.location.pathname.split('/').filter(Boolean);
+      if (parts.length > 0 && !parts[0].includes('.')) {
+        return parts[0];
+      }
+    }
+    return 'HPC-Cluster-Slot-booking';
+  },
+
+  sanitizeOwner(val) {
+    let o = (val || '').trim().replace(/\s+/g, '-');
+    if (!o || o.toLowerCase() === 'nikhilesh' || o.toLowerCase() === 'your-github-username') {
+      return this.getDefaultOwner();
+    }
+    return o;
+  },
+
+  sanitizeRepo(val) {
+    let r = (val || '').trim();
+    if (!r || (r.toLowerCase().includes('hpc') && (r.includes(' ') || r.toLowerCase() === 'hpc-slot-booking' || r.toLowerCase() === 'hpc-booking-system'))) {
+      return 'HPC-Cluster-Slot-booking';
+    }
+    return r.replace(/\s+/g, '-');
+  },
+
   getConfig() {
+    const defaultOwner = this.getDefaultOwner();
+    const defaultRepo = this.getDefaultRepo();
     try {
       const raw = localStorage.getItem(STORAGE_KEY_AUTH);
-      if (!raw) return { token: '', owner: '', repo: '', branch: 'main', filePath: 'bookings.json', isConfigured: false };
+      if (!raw) {
+        return {
+          token: '',
+          owner: defaultOwner,
+          repo: defaultRepo,
+          branch: 'main',
+          filePath: 'bookings.json',
+          isConfigured: false
+        };
+      }
       const parsed = JSON.parse(raw);
+      const token = (parsed.token || '').trim();
+      let owner = this.sanitizeOwner(parsed.owner);
+      let repo = this.sanitizeRepo(parsed.repo);
+
+      // Auto-heal corrupted/typo owner and repo in localStorage immediately
+      if (parsed.owner !== owner || parsed.repo !== repo) {
+        try {
+          parsed.owner = owner;
+          parsed.repo = repo;
+          localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(parsed));
+        } catch {}
+      }
+
       return {
-        token: parsed.token || '',
-        owner: parsed.owner || '',
-        repo: parsed.repo || '',
-        branch: parsed.branch || 'main',
-        filePath: parsed.filePath || 'bookings.json',
-        isConfigured: Boolean(parsed.token && parsed.owner && parsed.repo)
+        token,
+        owner,
+        repo,
+        branch: (parsed.branch || 'main').trim(),
+        filePath: (parsed.filePath || 'bookings.json').trim(),
+        isConfigured: Boolean(token && owner && repo)
       };
     } catch {
-      return { token: '', owner: '', repo: '', branch: 'main', filePath: 'bookings.json', isConfigured: false };
+      return {
+        token: '',
+        owner: defaultOwner,
+        repo: defaultRepo,
+        branch: 'main',
+        filePath: 'bookings.json',
+        isConfigured: false
+      };
     }
   },
 
   saveConfig(config) {
+    const defaultOwner = this.getDefaultOwner();
+    const defaultRepo = this.getDefaultRepo();
+    let owner = (config.owner || defaultOwner).trim().replace(/\s+/g, '-');
+    let repo = (config.repo || defaultRepo).trim().replace(/\s+/g, '-');
+
+    if (owner.toLowerCase() === 'nikhilesh') owner = 'nikhilesh-glitch';
+    if (repo.toLowerCase() === 'hpc-slot-booking' || repo.toLowerCase() === 'hpc slot booking') {
+      repo = 'HPC-Cluster-Slot-booking';
+    }
+
     const cleaned = {
       token: (config.token || '').trim(),
-      owner: (config.owner || '').trim(),
-      repo: (config.repo || '').trim(),
+      owner: owner || defaultOwner,
+      repo: repo || defaultRepo,
       branch: (config.branch || 'main').trim(),
       filePath: (config.filePath || 'bookings.json').trim()
     };
@@ -78,6 +152,34 @@ const AuthManager = {
       console.warn('localStorage access failed:', e);
     }
     return this.getConfig();
+  },
+
+  checkUrlHashConfig() {
+    try {
+      if (typeof window === 'undefined' || !window.location.hash) return false;
+      const hashStr = window.location.hash.substring(1);
+      if (!hashStr) return false;
+
+      const params = new URLSearchParams(hashStr);
+      const token = params.get('token') || params.get('syncKey') || params.get('pat');
+      if (token) {
+        const current = this.getConfig();
+        current.token = token.trim();
+        if (params.get('owner')) current.owner = params.get('owner').trim();
+        if (params.get('repo')) current.repo = params.get('repo').trim();
+        if (params.get('branch')) current.branch = params.get('branch').trim();
+        this.saveConfig(current);
+
+        // Cleanly strip hash from address bar and history to keep token safe
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        return true;
+      }
+    } catch (e) {
+      console.warn('URL hash config error:', e);
+    }
+    return false;
   },
 
   clearConfig() {
@@ -113,22 +215,67 @@ const AuthManager = {
           'Accept': 'application/vnd.github.v3+json'
         }
       });
-      if (!userRes.ok) throw new Error(`Invalid GitHub Token (Status ${userRes.status}).`);
+      if (!userRes.ok) throw new Error(`Invalid GitHub Token (Status ${userRes.status}). Check that the token was pasted correctly.`);
       const userData = await userRes.json();
+      const login = userData.login;
 
-      const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github.v3+json'
+      // Candidate owners and repos to test
+      const ownerCandidates = Array.from(new Set([
+        owner,
+        login,
+        'nikhilesh-glitch',
+        (owner || '').toLowerCase(),
+        (owner || '').replace(/\s+/g, '-')
+      ])).filter(Boolean);
+
+      const repoCandidates = Array.from(new Set([
+        repo,
+        (repo || '').replace(/\s+/g, '-'),
+        'HPC-Cluster-Slot-booking',
+        'hpc-cluster-slot-booking',
+        (repo || '').toLowerCase().replace(/\s+/g, '-')
+      ])).filter(Boolean);
+
+      let workingRepoData = null;
+      let matchedOwner = owner;
+      let matchedRepo = repo;
+
+      for (const o of ownerCandidates) {
+        for (const r of repoCandidates) {
+          try {
+            const repoRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(o)}/${encodeURIComponent(r)}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/vnd.github.v3+json'
+              }
+            });
+            if (repoRes.ok) {
+              workingRepoData = await repoRes.json();
+              matchedOwner = o;
+              matchedRepo = r;
+              break;
+            }
+          } catch {}
         }
-      });
-      if (!repoRes.ok) throw new Error(`Cannot access repository ${owner}/${repo}. Check permissions.`);
-      const repoData = await repoRes.json();
+        if (workingRepoData) break;
+      }
+
+      if (!workingRepoData) {
+        throw new Error(
+          `Cannot access repository "${owner}/${repo}".<br><br>` +
+          `<strong>How to fix:</strong><br>` +
+          `• <strong>Repo Owner (User/Org)</strong>: Change <code>${owner}</code> to <strong><code>${login}</code></strong> (or <strong><code>nikhilesh-glitch</code></strong>).<br>` +
+          `• <strong>Repository Name</strong>: Change <code>${repo}</code> to <strong><code>HPC-Cluster-Slot-booking</code></strong> (no spaces!).<br>` +
+          `• Ensure your Personal Access Token has <strong>Contents: Read and write</strong> permissions on this repository.`
+        );
+      }
 
       return {
         success: true,
-        user: userData.login,
-        repoFullName: repoData.full_name
+        user: login,
+        repoFullName: workingRepoData.full_name,
+        correctedOwner: matchedOwner,
+        correctedRepo: matchedRepo
       };
     } catch (err) {
       return { success: false, error: err.message };
@@ -142,86 +289,149 @@ const AuthManager = {
 let cachedSha = null;
 
 const GitHubApi = {
-  async getBookings() {
-    const config = AuthManager.getConfig();
+  mergeBookings(remoteData, localData) {
+    if (!remoteData || !remoteData.nodes) return localData || DEFAULT_BOOKINGS;
+    if (!localData || !localData.nodes) return remoteData;
 
-    if (config.token && config.owner && config.repo) {
-      try {
-        const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.filePath}?ref=${config.branch || 'main'}&t=${Date.now()}`;
-        const res = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${config.token}`,
-            'Accept': 'application/vnd.github.v3+json'
-          }
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          cachedSha = data.sha;
-          const parsed = JSON.parse(base64ToUtf8(data.content));
-          try { localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(parsed)); } catch {}
-          return { source: 'github', data: parsed, sha: cachedSha };
+    const merged = JSON.parse(JSON.stringify(remoteData));
+    for (const [nodeId, nodeObj] of Object.entries(localData.nodes)) {
+      if (!merged.nodes[nodeId]) {
+        merged.nodes[nodeId] = nodeObj;
+        continue;
+      }
+      if (!merged.nodes[nodeId].slots) {
+        merged.nodes[nodeId].slots = {};
+      }
+      if (nodeObj.slots) {
+        for (const [dateStr, daySlots] of Object.entries(nodeObj.slots)) {
+          merged.nodes[nodeId].slots[dateStr] = {
+            ...(merged.nodes[nodeId].slots[dateStr] || {}),
+            ...daySlots
+          };
         }
-      } catch (err) {
-        console.warn('GitHub API fetch failed, falling back:', err);
       }
     }
+    return merged;
+  },
 
+  async getBookings() {
+    const config = AuthManager.getConfig();
+    const owner = AuthManager.sanitizeOwner(config.owner);
+    const repo = AuthManager.sanitizeRepo(config.repo);
+    const branch = config.branch || 'main';
+    const filePath = config.filePath || 'bookings.json';
+
+    // 1. Primary: Try GitHub Contents REST API
+    try {
+      const headers = { 'Accept': 'application/vnd.github.v3+json' };
+      if (config.token) {
+        headers['Authorization'] = `Bearer ${config.token}`;
+      }
+      const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}&t=${Date.now()}`;
+      const res = await fetch(url, { headers });
+
+      if (res.ok) {
+        const data = await res.json();
+        cachedSha = data.sha;
+        const parsed = JSON.parse(base64ToUtf8(data.content));
+        try { localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(parsed)); } catch {}
+        return { source: 'github_api', data: parsed, sha: cachedSha };
+      }
+    } catch (err) {
+      console.warn('GitHub API fetch failed, trying raw / static:', err);
+    }
+
+    // 2. High-speed raw GitHub fallback (no token required, no GitHub API rate limits)
+    try {
+      const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}?t=${Date.now()}`;
+      const rawRes = await fetch(rawUrl);
+      if (rawRes.ok) {
+        const rawData = await rawRes.json();
+        try { localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(rawData)); } catch {}
+        return { source: 'github_raw', data: rawData, sha: cachedSha };
+      }
+    } catch (err) {
+      console.warn('Raw GitHub fetch failed, trying local static file:', err);
+    }
+
+    // 3. Local relative static file
+    try {
+      const origin = (typeof window !== 'undefined' && window.location.origin) ? window.location.origin : '';
+      const pathname = (typeof window !== 'undefined' && window.location.pathname) ? window.location.pathname : '';
+      const basePath = pathname.endsWith('/') ? pathname : pathname.substring(0, pathname.lastIndexOf('/') + 1) || '/';
+      const staticUrl = origin + (basePath.endsWith('/') ? basePath : basePath + '/') + filePath + '?t=' + Date.now();
+      const staticRes = await fetch(staticUrl);
+      if (staticRes.ok) {
+        const staticData = await staticRes.json();
+        try { localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(staticData)); } catch {}
+        return { source: 'static_file', data: staticData, sha: cachedSha };
+      }
+    } catch {}
+
+    // 4. LocalStorage cache (offline fallback only)
     try {
       const local = localStorage.getItem(STORAGE_KEY_BOOKINGS);
       if (local) {
         const parsed = JSON.parse(local);
-        return { source: 'local_storage', data: parsed, sha: null };
+        return { source: 'local_storage', data: parsed, sha: cachedSha };
       }
     } catch {}
 
-    try {
-      const staticRes = await fetch('./bookings.json?t=' + Date.now());
-      if (staticRes.ok) {
-        const staticData = await staticRes.json();
-        try { localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(staticData)); } catch {}
-        return { source: 'static_file', data: staticData, sha: null };
-      }
-    } catch {}
-
+    // 5. Default fallback
     try { localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(DEFAULT_BOOKINGS)); } catch {}
     return { source: 'default', data: DEFAULT_BOOKINGS, sha: null };
   },
 
   async updateBookings(updatedData, commitMessage) {
     const config = AuthManager.getConfig();
+    const owner = AuthManager.sanitizeOwner(config.owner);
+    const repo = AuthManager.sanitizeRepo(config.repo);
+    const branch = config.branch || 'main';
+    const filePath = config.filePath || 'bookings.json';
+
     updatedData.lastUpdated = new Date().toISOString();
 
+    // Cache to localStorage immediately for snappy local response
     try {
       localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(updatedData));
     } catch (e) {
       console.warn('localStorage update failed:', e);
     }
 
-    if (config.token && config.owner && config.repo) {
-      const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.filePath}`;
+    if (config.token && owner && repo) {
+      const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
 
-      if (!cachedSha) {
-        try {
-          const check = await fetch(`${url}?ref=${config.branch || 'main'}&t=${Date.now()}`, {
-            headers: {
-              'Authorization': `Bearer ${config.token}`,
-              'Accept': 'application/vnd.github.v3+json'
-            }
-          });
-          if (check.ok) {
-            const checkData = await check.json();
-            cachedSha = checkData.sha;
+      // Always re-fetch latest remote sha and content first to prevent HTTP 409 conflict
+      // and prevent overwriting concurrent bookings made by other faculty
+      let currentSha = cachedSha;
+      let mergedData = updatedData;
+
+      try {
+        const check = await fetch(`${url}?ref=${branch}&t=${Date.now()}`, {
+          headers: {
+            'Authorization': `Bearer ${config.token}`,
+            'Accept': 'application/vnd.github.v3+json'
           }
-        } catch {}
+        });
+        if (check.ok) {
+          const checkData = await check.json();
+          currentSha = checkData.sha;
+          cachedSha = currentSha;
+          const remoteJson = JSON.parse(base64ToUtf8(checkData.content));
+          mergedData = this.mergeBookings(remoteJson, updatedData);
+        }
+      } catch (e) {
+        console.warn('Pre-commit fetch error, proceeding with cached SHA:', e);
       }
+
+      mergedData.lastUpdated = new Date().toISOString();
 
       const payload = {
         message: commitMessage || `HPC Slot Update: ${new Date().toISOString()}`,
-        content: utf8ToBase64(JSON.stringify(updatedData, null, 2)),
-        branch: config.branch || 'main'
+        content: utf8ToBase64(JSON.stringify(mergedData, null, 2)),
+        branch: branch
       };
-      if (cachedSha) payload.sha = cachedSha;
+      if (currentSha) payload.sha = currentSha;
 
       const putRes = await fetch(url, {
         method: 'PUT',
@@ -240,10 +450,14 @@ const GitHubApi = {
 
       const resData = await putRes.json();
       cachedSha = resData.content ? resData.content.sha : null;
-      return { success: true, source: 'github', commit: resData.commit?.sha };
+      try {
+        localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(mergedData));
+      } catch {}
+
+      return { success: true, source: 'github', commit: resData.commit?.sha, data: mergedData };
     }
 
-    return { success: true, source: 'local_storage' };
+    return { success: true, source: 'local_storage', data: updatedData };
   }
 };
 
@@ -698,6 +912,14 @@ const el = {
   btnTestConnection: document.getElementById('btn-test-connection'),
   btnClearSettings: document.getElementById('btn-clear-settings'),
   settingsStatusBox: document.getElementById('settings-status-box'),
+  btnCopyShareLink: document.getElementById('btn-copy-share-link'),
+
+  // Real-Time Sync Token Prompt Modal
+  syncPromptModal: document.getElementById('sync-prompt-modal'),
+  promptSyncToken: document.getElementById('prompt-sync-token'),
+  btnPromptSaveSync: document.getElementById('btn-prompt-save-sync'),
+  btnPromptLocalOnly: document.getElementById('btn-prompt-local-only'),
+  btnPromptCancel: document.getElementById('btn-prompt-cancel'),
 
   // Cluster SSH Live Feed Elements (10.206.4.128 - 7s Refresh)
   btnClusterSsh: document.getElementById('btn-cluster-ssh'),
@@ -782,10 +1004,12 @@ function updateSyncPill() {
     el.syncIndicator.className = 'h-2 w-2 rounded-full bg-emerald-400';
     el.syncLabel.textContent = `GitHub: ${config.owner}/${config.repo}`;
     el.btnAuthText.textContent = `${config.owner}`;
+    if (el.syncStatusBtn) el.syncStatusBtn.title = `Connected & Synced with GitHub (${config.owner}/${config.repo})`;
   } else {
     el.syncIndicator.className = 'h-2 w-2 rounded-full bg-amber-400 animate-pulse';
-    el.syncLabel.textContent = 'Local / Demo Mode';
-    el.btnAuthText.textContent = 'Settings & PAT';
+    el.syncLabel.textContent = 'Sync Inactive (Local)';
+    el.btnAuthText.textContent = 'Connect Sync';
+    if (el.syncStatusBtn) el.syncStatusBtn.title = 'Click to connect Department GitHub Token for real-time cross-faculty synchronization';
   }
 }
 
@@ -1257,6 +1481,117 @@ function closeBookingModal() {
   state.activeSlot = null;
 }
 
+// -------------------------------------------------------------
+// Real-Time Cross-Faculty Sync Prompt & Handlers
+// -------------------------------------------------------------
+let pendingSyncAction = null;
+
+function openSyncPromptModal(action) {
+  pendingSyncAction = action;
+  if (el.promptSyncToken) el.promptSyncToken.value = '';
+  if (el.syncPromptModal) el.syncPromptModal.classList.remove('hidden');
+}
+
+function closeSyncPromptModal() {
+  if (el.syncPromptModal) el.syncPromptModal.classList.add('hidden');
+  pendingSyncAction = null;
+}
+
+async function handlePromptSaveSync() {
+  const token = el.promptSyncToken ? el.promptSyncToken.value.trim() : '';
+  if (!token) {
+    showToast('Please enter a GitHub PAT token to enable sync.', 'error');
+    return;
+  }
+
+  const current = AuthManager.getConfig();
+  current.token = token;
+  AuthManager.saveConfig(current);
+  updateSyncPill();
+  showToast('Department Sync Token saved & connected!', 'success');
+
+  const action = pendingSyncAction;
+  closeSyncPromptModal();
+
+  if (action && typeof action.execute === 'function') {
+    await action.execute();
+  }
+}
+
+function handlePromptLocalOnly() {
+  const action = pendingSyncAction;
+  closeSyncPromptModal();
+  if (action && typeof action.fallbackLocal === 'function') {
+    action.fallbackLocal();
+  }
+}
+
+function handleCopyShareLink() {
+  const config = AuthManager.getConfig();
+  const tokenToUse = (el.inputSettingsToken && el.inputSettingsToken.value.trim()) || config.token;
+  if (!tokenToUse) {
+    showToast('Please enter and save a GitHub PAT token first before copying the invite link.', 'warning');
+    if (el.inputSettingsToken) el.inputSettingsToken.focus();
+    return;
+  }
+
+  const owner = (el.inputSettingsOwner && el.inputSettingsOwner.value.trim()) || config.owner || AuthManager.getDefaultOwner();
+  const repo = (el.inputSettingsRepo && el.inputSettingsRepo.value.trim()) || config.repo || AuthManager.getDefaultRepo();
+  const branch = (el.inputSettingsBranch && el.inputSettingsBranch.value.trim()) || config.branch || 'main';
+
+  const baseUrl = window.location.origin + window.location.pathname;
+  const shareUrl = `${baseUrl}#token=${encodeURIComponent(tokenToUse)}&owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`;
+
+  navigator.clipboard.writeText(shareUrl).then(() => {
+    showToast('✓ One-Click Faculty Invite Link copied! Share this link with faculty.', 'success');
+  }).catch(() => {
+    window.prompt('Copy this One-Click Faculty Invite Link:', shareUrl);
+  });
+}
+
+async function executeBooking(nodeId, dateStr, slotKey, facultyInfo) {
+  if (el.submitBtnSpinner) el.submitBtnSpinner.classList.remove('hidden');
+  if (el.submitBtnLabel) el.submitBtnLabel.textContent = 'Syncing to GitHub...';
+  if (el.modalSubmitBtn) el.modalSubmitBtn.disabled = true;
+
+  try {
+    const updated = CalendarService.applyBooking(state.bookingsData, nodeId, dateStr, slotKey, facultyInfo);
+    const commitMsg = `Book slot: ${nodeId} (${dateStr} ${slotKey}) for ${facultyInfo.name} (${facultyInfo.role})`;
+    const result = await GitHubApi.updateBookings(updated, commitMsg);
+
+    state.bookingsData = result.data || updated;
+    closeBookingModal();
+    renderMonthCalendar();
+    renderDaySlots();
+    renderTelemetry();
+
+    if (result.source === 'github') {
+      showToast(`Slot reserved on ${nodeId} & synced to GitHub!`, 'success');
+    } else {
+      showToast(`Slot reserved on ${nodeId} (Local mode)!`, 'info');
+    }
+  } catch (err) {
+    showToast(`Booking error: ${err.message}`, 'error');
+  } finally {
+    if (el.submitBtnSpinner) el.submitBtnSpinner.classList.add('hidden');
+    if (el.submitBtnLabel) el.submitBtnLabel.textContent = 'Confirm Reservation';
+    if (el.modalSubmitBtn) el.modalSubmitBtn.disabled = false;
+  }
+}
+
+function executeBookingLocalOnly(nodeId, dateStr, slotKey, facultyInfo) {
+  const updated = CalendarService.applyBooking(state.bookingsData, nodeId, dateStr, slotKey, facultyInfo);
+  try {
+    localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(updated));
+  } catch {}
+  state.bookingsData = updated;
+  closeBookingModal();
+  renderMonthCalendar();
+  renderDaySlots();
+  renderTelemetry();
+  showToast(`⚠️ Reserved locally only. Other faculty will not see this booking!`, 'warning');
+}
+
 async function handleBookingSubmit(e) {
   e.preventDefault();
   if (!state.activeSlot) return;
@@ -1278,33 +1613,20 @@ async function handleBookingSubmit(e) {
     department: facultyInfo.department
   });
 
-  if (el.submitBtnSpinner) el.submitBtnSpinner.classList.remove('hidden');
-  if (el.submitBtnLabel) el.submitBtnLabel.textContent = 'Saving Booking...';
-  if (el.modalSubmitBtn) el.modalSubmitBtn.disabled = true;
-
-  try {
-    const updated = CalendarService.applyBooking(state.bookingsData, nodeId, dateStr, slotKey, facultyInfo);
-    const commitMsg = `Book slot: ${nodeId} (${dateStr} ${slotKey}) for ${facultyInfo.name} (${facultyInfo.role})`;
-    const result = await GitHubApi.updateBookings(updated, commitMsg);
-
-    state.bookingsData = updated;
-    closeBookingModal();
-    renderMonthCalendar();
-    renderDaySlots();
-    renderTelemetry();
-
-    if (result.source === 'github') {
-      showToast(`Slot reserved on ${nodeId} & committed to GitHub!`, 'success');
-    } else {
-      showToast(`Slot reserved on ${nodeId} successfully!`, 'success');
-    }
-  } catch (err) {
-    showToast(`Booking error: ${err.message}`, 'error');
-  } finally {
-    if (el.submitBtnSpinner) el.submitBtnSpinner.classList.add('hidden');
-    if (el.submitBtnLabel) el.submitBtnLabel.textContent = 'Confirm Reservation';
-    if (el.modalSubmitBtn) el.modalSubmitBtn.disabled = false;
+  const config = AuthManager.getConfig();
+  if (!config.token) {
+    openSyncPromptModal({
+      execute: async () => {
+        await executeBooking(nodeId, dateStr, slotKey, facultyInfo);
+      },
+      fallbackLocal: () => {
+        executeBookingLocalOnly(nodeId, dateStr, slotKey, facultyInfo);
+      }
+    });
+    return;
   }
+
+  await executeBooking(nodeId, dateStr, slotKey, facultyInfo);
 }
 
 function openManageModal(nodeId, dateStr, slotKey) {
@@ -1335,6 +1657,49 @@ function closeManageModal() {
   state.activeSlot = null;
 }
 
+async function executeModify(nodeId, dateStr, slotKey, updatedInfo) {
+  if (el.modifySpinner) el.modifySpinner.classList.remove('hidden');
+  if (el.modifyLabel) el.modifyLabel.textContent = 'Syncing Changes...';
+  if (el.btnSaveModify) el.btnSaveModify.disabled = true;
+
+  try {
+    const updated = CalendarService.modifyBooking(state.bookingsData, nodeId, dateStr, slotKey, updatedInfo);
+    const commitMsg = `Modify booking: ${nodeId} (${dateStr} ${slotKey}) for ${updatedInfo.name}`;
+    const result = await GitHubApi.updateBookings(updated, commitMsg);
+
+    state.bookingsData = result.data || updated;
+    closeManageModal();
+    renderMonthCalendar();
+    renderDaySlots();
+    renderTelemetry();
+
+    if (result.source === 'github') {
+      showToast(`Reservation modified & synced to GitHub!`, 'success');
+    } else {
+      showToast(`Reservation updated locally!`, 'info');
+    }
+  } catch (err) {
+    showToast(`Modification error: ${err.message}`, 'error');
+  } finally {
+    if (el.modifySpinner) el.modifySpinner.classList.add('hidden');
+    if (el.modifyLabel) el.modifyLabel.textContent = 'Save Modifications';
+    if (el.btnSaveModify) el.btnSaveModify.disabled = false;
+  }
+}
+
+function executeModifyLocalOnly(nodeId, dateStr, slotKey, updatedInfo) {
+  const updated = CalendarService.modifyBooking(state.bookingsData, nodeId, dateStr, slotKey, updatedInfo);
+  try {
+    localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(updated));
+  } catch {}
+  state.bookingsData = updated;
+  closeManageModal();
+  renderMonthCalendar();
+  renderDaySlots();
+  renderTelemetry();
+  showToast(`⚠️ Modified locally only. Not synced with other faculty!`, 'warning');
+}
+
 async function handleModifySubmit(e) {
   e.preventDefault();
   if (!state.activeSlot) return;
@@ -1349,33 +1714,55 @@ async function handleModifySubmit(e) {
     coresRequested: el.modifyResources.value.trim() || '64 Cores'
   };
 
-  if (el.modifySpinner) el.modifySpinner.classList.remove('hidden');
-  if (el.modifyLabel) el.modifyLabel.textContent = 'Saving Changes...';
-  if (el.btnSaveModify) el.btnSaveModify.disabled = true;
+  const config = AuthManager.getConfig();
+  if (!config.token) {
+    openSyncPromptModal({
+      execute: async () => {
+        await executeModify(nodeId, dateStr, slotKey, updatedInfo);
+      },
+      fallbackLocal: () => {
+        executeModifyLocalOnly(nodeId, dateStr, slotKey, updatedInfo);
+      }
+    });
+    return;
+  }
 
+  await executeModify(nodeId, dateStr, slotKey, updatedInfo);
+}
+
+async function executeDelete(nodeId, dateStr, slotKey) {
   try {
-    const updated = CalendarService.modifyBooking(state.bookingsData, nodeId, dateStr, slotKey, updatedInfo);
-    const commitMsg = `Modify booking: ${nodeId} (${dateStr} ${slotKey}) for ${updatedInfo.name}`;
+    const updated = CalendarService.applyCancellation(state.bookingsData, nodeId, dateStr, slotKey);
+    const commitMsg = `Release/Delete booking: ${nodeId} (${dateStr} ${slotKey})`;
     const result = await GitHubApi.updateBookings(updated, commitMsg);
 
-    state.bookingsData = updated;
+    state.bookingsData = result.data || updated;
     closeManageModal();
     renderMonthCalendar();
     renderDaySlots();
     renderTelemetry();
 
     if (result.source === 'github') {
-      showToast(`Reservation modified & committed to GitHub!`, 'success');
+      showToast(`Reservation deleted & slot released on GitHub!`, 'success');
     } else {
-      showToast(`Reservation updated successfully!`, 'success');
+      showToast(`Reservation deleted locally!`, 'info');
     }
   } catch (err) {
-    showToast(`Modification error: ${err.message}`, 'error');
-  } finally {
-    if (el.modifySpinner) el.modifySpinner.classList.add('hidden');
-    if (el.modifyLabel) el.modifyLabel.textContent = 'Save Modifications';
-    if (el.btnSaveModify) el.btnSaveModify.disabled = false;
+    showToast(`Deletion error: ${err.message}`, 'error');
   }
+}
+
+function executeDeleteLocalOnly(nodeId, dateStr, slotKey) {
+  const updated = CalendarService.applyCancellation(state.bookingsData, nodeId, dateStr, slotKey);
+  try {
+    localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(updated));
+  } catch {}
+  state.bookingsData = updated;
+  closeManageModal();
+  renderMonthCalendar();
+  renderDaySlots();
+  renderTelemetry();
+  showToast(`⚠️ Slot released locally only. Not synced with other faculty!`, 'warning');
 }
 
 async function handleDeleteSlot() {
@@ -1385,25 +1772,20 @@ async function handleDeleteSlot() {
   const confirmed = window.confirm(`Release the ${slotKey} reservation on ${dateStr} for ${nodeId}?\nThis will make the slot available for others.`);
   if (!confirmed) return;
 
-  try {
-    const updated = CalendarService.applyCancellation(state.bookingsData, nodeId, dateStr, slotKey);
-    const commitMsg = `Release/Delete booking: ${nodeId} (${dateStr} ${slotKey})`;
-    const result = await GitHubApi.updateBookings(updated, commitMsg);
-
-    state.bookingsData = updated;
-    closeManageModal();
-    renderMonthCalendar();
-    renderDaySlots();
-    renderTelemetry();
-
-    if (result.source === 'github') {
-      showToast(`Reservation deleted & slot released on GitHub!`, 'success');
-    } else {
-      showToast(`Reservation deleted & slot released!`, 'success');
-    }
-  } catch (err) {
-    showToast(`Deletion error: ${err.message}`, 'error');
+  const config = AuthManager.getConfig();
+  if (!config.token) {
+    openSyncPromptModal({
+      execute: async () => {
+        await executeDelete(nodeId, dateStr, slotKey);
+      },
+      fallbackLocal: () => {
+        executeDeleteLocalOnly(nodeId, dateStr, slotKey);
+      }
+    });
+    return;
   }
+
+  await executeDelete(nodeId, dateStr, slotKey);
 }
 
 function handleCopySlurm() {
@@ -1419,11 +1801,19 @@ function openSettingsModal() {
   const config = AuthManager.getConfig();
   const profile = AuthManager.getProfile();
 
+  let owner = config.owner || AuthManager.getDefaultOwner();
+  let repo = config.repo || AuthManager.getDefaultRepo();
+
+  if (owner.toLowerCase() === 'nikhilesh') owner = 'nikhilesh-glitch';
+  if (repo.toLowerCase().includes('hpc') && (repo.includes(' ') || repo.toLowerCase() === 'hpc-slot-booking')) {
+    repo = 'HPC-Cluster-Slot-booking';
+  }
+
   if (el.inputSettingsToken) el.inputSettingsToken.value = config.token;
-  if (el.inputSettingsOwner) el.inputSettingsOwner.value = config.owner;
-  if (el.inputSettingsRepo) el.inputSettingsRepo.value = config.repo;
-  if (el.inputSettingsBranch) el.inputSettingsBranch.value = config.branch;
-  if (el.inputSettingsPath) el.inputSettingsPath.value = config.filePath;
+  if (el.inputSettingsOwner) el.inputSettingsOwner.value = owner;
+  if (el.inputSettingsRepo) el.inputSettingsRepo.value = repo;
+  if (el.inputSettingsBranch) el.inputSettingsBranch.value = config.branch || 'main';
+  if (el.inputSettingsPath) el.inputSettingsPath.value = config.filePath || 'bookings.json';
   if (el.inputProfileName) el.inputProfileName.value = profile.name || '';
   if (el.inputProfileEmail) el.inputProfileEmail.value = profile.email || '';
 
@@ -1433,12 +1823,12 @@ function openSettingsModal() {
 
 async function handleTestConnection() {
   const token = el.inputSettingsToken.value.trim();
-  const owner = el.inputSettingsOwner.value.trim();
-  const repo = el.inputSettingsRepo.value.trim();
+  let owner = el.inputSettingsOwner.value.trim() || AuthManager.getDefaultOwner();
+  let repo = el.inputSettingsRepo.value.trim() || AuthManager.getDefaultRepo();
 
-  if (!token || !owner || !repo) {
+  if (!token) {
     el.settingsStatusBox.className = 'p-3 rounded-lg text-xs bg-amber-950/70 border border-amber-800 text-amber-200 block';
-    el.settingsStatusBox.textContent = 'Please provide Token, Owner, and Repo before testing.';
+    el.settingsStatusBox.textContent = 'Please paste your GitHub Personal Access Token (PAT) before testing.';
     return;
   }
 
@@ -1447,23 +1837,46 @@ async function handleTestConnection() {
 
   const res = await AuthManager.testConnection(token, owner, repo);
   if (res.success) {
+    if (res.correctedOwner) el.inputSettingsOwner.value = res.correctedOwner;
+    if (res.correctedRepo) el.inputSettingsRepo.value = res.correctedRepo;
+
+    AuthManager.saveConfig({
+      token,
+      owner: res.correctedOwner || owner,
+      repo: res.correctedRepo || repo,
+      branch: el.inputSettingsBranch.value || 'main',
+      filePath: el.inputSettingsPath.value || 'bookings.json'
+    });
+    updateSyncPill();
+
     el.settingsStatusBox.className = 'p-3 rounded-lg text-xs bg-emerald-950/70 border border-emerald-800 text-emerald-200 block';
-    el.settingsStatusBox.innerHTML = `✓ Authenticated as <strong>@${res.user}</strong>. Access to <strong>${res.repoFullName}</strong> verified!`;
+    el.settingsStatusBox.innerHTML = `✓ Authenticated as <strong>@${res.user}</strong>. Access to <strong>${res.repoFullName}</strong> verified! Real-time sync ready.`;
   } else {
     el.settingsStatusBox.className = 'p-3 rounded-lg text-xs bg-red-950/70 border border-red-800 text-red-200 block';
-    el.settingsStatusBox.textContent = `⚠ Connection Failed: ${res.error}`;
+    el.settingsStatusBox.innerHTML = `⚠ Connection Failed: ${res.error}`;
   }
 }
 
 async function handleSettingsSubmit(e) {
   e.preventDefault();
 
+  let owner = (el.inputSettingsOwner.value || '').trim();
+  let repo = (el.inputSettingsRepo.value || '').trim();
+
+  // Clean common typos
+  owner = owner.replace(/\s+/g, '-');
+  repo = repo.replace(/\s+/g, '-');
+  if (owner.toLowerCase() === 'nikhilesh') owner = 'nikhilesh-glitch';
+  if (repo.toLowerCase() === 'hpc-slot-booking' || repo.toLowerCase() === 'hpc slot booking' || !repo) {
+    repo = 'HPC-Cluster-Slot-booking';
+  }
+
   AuthManager.saveConfig({
     token: el.inputSettingsToken.value,
-    owner: el.inputSettingsOwner.value,
-    repo: el.inputSettingsRepo.value,
-    branch: el.inputSettingsBranch.value,
-    filePath: el.inputSettingsPath.value
+    owner: owner || AuthManager.getDefaultOwner(),
+    repo: repo || AuthManager.getDefaultRepo(),
+    branch: el.inputSettingsBranch.value || 'main',
+    filePath: el.inputSettingsPath.value || 'bookings.json'
   });
 
   AuthManager.saveProfile({
@@ -1473,9 +1886,9 @@ async function handleSettingsSubmit(e) {
 
   updateSyncPill();
   if (el.settingsModal) el.settingsModal.classList.add('hidden');
-  showToast('Settings saved!', 'info');
+  showToast('Settings saved successfully!', 'info');
 
-  await loadBookings();
+  await loadBookings(true);
 }
 
 function handleClearSettings() {
@@ -1487,13 +1900,18 @@ function handleClearSettings() {
   }
 }
 
-async function loadBookings() {
+async function loadBookings(showToastNotification = false) {
   try {
     const res = await GitHubApi.getBookings();
     state.bookingsData = res.data;
+    if (showToastNotification) {
+      showToast(`Refreshed bookings via ${res.source.replace('_', ' ')}!`, 'info');
+    }
   } catch (err) {
     console.warn('Load bookings warning:', err);
-    state.bookingsData = DEFAULT_BOOKINGS;
+    if (!state.bookingsData) {
+      state.bookingsData = DEFAULT_BOOKINGS;
+    }
   }
   renderMonthCalendar();
   renderDaySlots();
@@ -1908,8 +2326,8 @@ function setupEvents() {
   // Refresh
   if (el.btnRefresh) {
     el.btnRefresh.addEventListener('click', async () => {
-      showToast('Refreshing bookings...', 'info');
-      await loadBookings();
+      showToast('Refreshing bookings from GitHub...', 'info');
+      await loadBookings(true);
     });
   }
 
@@ -1920,6 +2338,12 @@ function setupEvents() {
   if (el.settingsForm) el.settingsForm.addEventListener('submit', handleSettingsSubmit);
   if (el.btnTestConnection) el.btnTestConnection.addEventListener('click', handleTestConnection);
   if (el.btnClearSettings) el.btnClearSettings.addEventListener('click', handleClearSettings);
+  if (el.btnCopyShareLink) el.btnCopyShareLink.addEventListener('click', handleCopyShareLink);
+
+  // Sync Prompt Modal Events
+  if (el.btnPromptSaveSync) el.btnPromptSaveSync.addEventListener('click', handlePromptSaveSync);
+  if (el.btnPromptLocalOnly) el.btnPromptLocalOnly.addEventListener('click', handlePromptLocalOnly);
+  if (el.btnPromptCancel) el.btnPromptCancel.addEventListener('click', closeSyncPromptModal);
 
   // Cluster SSH Modal Events (10.206.4.128)
   if (el.btnClusterSsh) el.btnClusterSsh.addEventListener('click', openSshModal);
@@ -1987,16 +2411,48 @@ function setupEvents() {
   }, 7000);
 }
 
+function isAnyModalOpen() {
+  const modals = [
+    el.bookingModal,
+    el.manageModal,
+    el.settingsModal,
+    el.sshModal,
+    el.syncPromptModal
+  ];
+  return modals.some(m => m && !m.classList.contains('hidden'));
+}
+
 // -------------------------------------------------------------
 // Initialization
 // -------------------------------------------------------------
 async function startApp() {
+  // Check if URL has #token=... for 1-click faculty invite setup
+  const hadHashToken = AuthManager.checkUrlHashConfig();
+
   updateSyncPill();
   setupEvents();
   renderMonthCalendar();
   renderDaySlots();
   renderTelemetry();
   await loadBookings();
+
+  if (hadHashToken) {
+    showToast('✓ Connected to Department HPC GitHub Sync! Bookings will now sync in real time.', 'success');
+  }
+
+  // Recurring 20s background sync for calendar bookings from GitHub
+  setInterval(async () => {
+    if (!isAnyModalOpen()) {
+      await loadBookings(false);
+    }
+  }, 20000);
+
+  // Auto-sync when user switches back to browser tab
+  window.addEventListener('focus', () => {
+    if (!isAnyModalOpen()) {
+      loadBookings(false);
+    }
+  });
 
   // Auto-probe if bridge is already running in background
   try {

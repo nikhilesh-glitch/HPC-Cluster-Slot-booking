@@ -637,13 +637,14 @@
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-300 mb-1">Repo Owner (User/Org)</label>
-            <input type="text" id="input-settings-owner" placeholder="e.g. your-github-username" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500">
+            <input type="text" id="input-settings-owner" value="nikhilesh-glitch" placeholder="nikhilesh-glitch" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500 font-mono">
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-300 mb-1">Repository Name</label>
-            <input type="text" id="input-settings-repo" placeholder="e.g. hpc-booking-system" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500">
+            <input type="text" id="input-settings-repo" value="HPC-Cluster-Slot-booking" placeholder="HPC-Cluster-Slot-booking" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500 font-mono">
           </div>
         </div>
+        <p class="text-[11px] text-slate-400 -mt-2">Must match your GitHub repository URL: <code>github.com/<strong>nikhilesh-glitch</strong>/<strong>HPC-Cluster-Slot-booking</strong></code> (no spaces).</p>
 
         <!-- Branch & File Path -->
         <div class="grid grid-cols-2 gap-3">
@@ -666,6 +667,21 @@
           </div>
         </div>
 
+        <!-- Department Shareable Link Section -->
+        <div class="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-200">One-Click Faculty Invite Link</span>
+            <span class="text-[10px] text-emerald-400 font-mono">Instant Auto-Sync</span>
+          </div>
+          <p class="text-[11px] text-slate-400">Share this instant link with faculty/students. Opening it once auto-configures synchronization in their browser without them having to type a token.</p>
+          <button type="button" id="btn-copy-share-link" class="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-600/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600/30 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
+            </svg>
+            <span>Copy One-Click Faculty Invite Link</span>
+          </button>
+        </div>
+
         <!-- Test Connection Output -->
         <div id="settings-status-box" class="p-3 rounded-lg text-xs hidden"></div>
 
@@ -684,6 +700,45 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- REAL-TIME SYNC TOKEN PROMPT MODAL -->
+  <div id="sync-prompt-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-amber-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center space-x-3">
+        <div class="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">Department Sync Token Required</h3>
+          <p class="text-xs text-amber-300/80">Cross-faculty synchronization is not active</p>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-300 leading-relaxed">
+        Without a synchronization token, this booking will only be stored locally in this browser. Other faculty members and students <strong>will not see this slot booked</strong> on GitHub Pages.
+      </p>
+
+      <div class="space-y-1.5">
+        <label class="block text-xs font-semibold text-slate-300">Department GitHub Token (PAT)</label>
+        <input type="password" id="prompt-sync-token" placeholder="Paste ghp_... or github_pat_..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500 font-mono">
+        <p class="text-[11px] text-slate-400">Ask the HPC administrator for the token, or open the One-Click Faculty Invite Link.</p>
+      </div>
+
+      <div class="space-y-2 pt-2">
+        <button type="button" id="btn-prompt-save-sync" class="w-full py-2.5 px-4 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition flex items-center justify-center space-x-2">
+          <span>Save Token & Sync Booking to GitHub</span>
+        </button>
+        <button type="button" id="btn-prompt-local-only" class="w-full py-2 px-4 rounded-lg text-xs font-medium text-slate-400 hover:text-amber-300 hover:bg-slate-800 transition">
+          Save in Local Demo Mode (Visible only in this browser)
+        </button>
+        <button type="button" id="btn-prompt-cancel" class="w-full py-1.5 px-4 rounded-lg text-xs text-slate-500 hover:text-slate-300 transition">
+          Cancel
+        </button>
+      </div>
     </div>
   </div>
 
