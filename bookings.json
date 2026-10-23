@@ -1,12 +1,25 @@
 {
   "version": "1.0",
-  "lastUpdated": "2026-10-22T00:00:00Z",
+  "lastUpdated": "2026-10-23T05:00:20.518Z",
   "nodes": {
     "node-1": {
       "name": "Node 1 (Shared Compute)",
       "specs": "64 Cores CPU, 256GB RAM (Shared across Faculty, Students, Staff)",
       "category": "shared",
-      "slots": {}
+      "slots": {
+        "2026-10-22": {
+          "13:00-17:00": {
+            "status": "Booked",
+            "bookedBy": "Mr. Nikhilesh Marko",
+            "role": "Technical / Dept Staff",
+            "email": "nik@iiti.ac.in",
+            "department": "Computer Science & Engineering",
+            "jobName": "Trial",
+            "coresRequested": "Full 64 Cores",
+            "bookedAt": "2026-10-23T05:00:20.518Z"
+          }
+        }
+      }
     },
     "node-2": {
       "name": "Node 2 (Shared Compute)",
