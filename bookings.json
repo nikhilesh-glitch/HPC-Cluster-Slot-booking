@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "lastUpdated": "2026-10-26T05:24:14.973Z",
+  "lastUpdated": "2026-10-26T05:38:09.808Z",
   "nodes": {
     "node-1": {
       "name": "Node 1 (Shared Compute)",
@@ -9,14 +9,7 @@
       "slots": {
         "2026-10-22": {
           "13:00-17:00": {
-            "status": "Booked",
-            "bookedBy": "Mr. Nikhilesh Marko",
-            "role": "Technical / Dept Staff",
-            "email": "nik@iiti.ac.in",
-            "department": "Computer Science & Engineering",
-            "jobName": "Trial",
-            "coresRequested": "Full 64 Cores",
-            "bookedAt": "2026-10-23T05:00:20.518Z"
+            "status": "Available"
           }
         },
         "2026-10-23": {
