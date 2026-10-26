@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "lastUpdated": "2026-10-23T09:09:12.145Z",
+  "lastUpdated": "2026-10-26T05:22:53.922Z",
   "nodes": {
     "node-1": {
       "name": "Node 1 (Shared Compute)",
@@ -33,14 +33,7 @@
         },
         "2026-10-24": {
           "09:00-13:00": {
-            "status": "Booked",
-            "bookedBy": "Mr. Nikhilesh Marko",
-            "role": "Faculty Member",
-            "email": "nik@iiti.ac.in",
-            "department": "Chemical Engineering",
-            "jobName": "Trial3",
-            "coresRequested": "Full 64 Cores",
-            "bookedAt": "2026-10-23T09:09:11.601Z"
+            "status": "Available"
           }
         }
       }
