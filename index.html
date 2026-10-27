@@ -237,6 +237,239 @@
 
     </section>
 
+    <!-- REALTIME NODE CORE ALLOCATION & AVAILABILITY MONITOR -->
+    <section id="node-core-telemetry-panel" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-5">
+      
+      <!-- Panel Header -->
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between pb-4 border-b border-slate-800 gap-4">
+        <div class="flex items-center space-x-3">
+          <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600/30 to-emerald-600/30 border border-blue-500/40 text-blue-400 shadow-md">
+            <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M3 9h2m-2 6h2m14-6h2m-2 6h2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+            </svg>
+          </div>
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 class="text-base sm:text-lg font-bold text-white tracking-tight font-mono">
+                Node Core Allocation: <span id="core-panel-node-title" class="text-blue-400">Node 1 (Shared Compute)</span>
+              </h2>
+              <span id="core-panel-status-badge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">
+                ● 64 / 64 Cores Available
+              </span>
+            </div>
+            <p id="core-panel-node-specs" class="text-xs text-slate-400 mt-0.5">
+              64 Cores CPU • 256GB RAM • Dual 100GbE Interconnect
+            </p>
+          </div>
+        </div>
+
+        <!-- Node Selector Pills & Stream Status -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Quick Node Pills -->
+          <div class="flex items-center bg-slate-950/80 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full text-xs">
+            <button type="button" data-node="node-1" class="core-node-pill px-2.5 py-1 rounded-lg font-medium transition bg-blue-600 text-white cursor-pointer">Node 1</button>
+            <button type="button" data-node="node-2" class="core-node-pill px-2.5 py-1 rounded-lg font-medium transition text-slate-400 hover:text-white cursor-pointer">Node 2</button>
+            <button type="button" data-node="node-3" class="core-node-pill px-2.5 py-1 rounded-lg font-medium transition text-slate-400 hover:text-white cursor-pointer">Node 3</button>
+            <button type="button" data-node="node-4" class="core-node-pill px-2.5 py-1 rounded-lg font-medium transition text-slate-400 hover:text-white cursor-pointer">Node 4</button>
+            <button type="button" data-node="node-5" class="core-node-pill px-2.5 py-1 rounded-lg font-medium transition text-slate-400 hover:text-white cursor-pointer">Node 5</button>
+            <button type="button" data-node="node-6" class="core-node-pill px-2.5 py-1 rounded-lg font-medium transition text-slate-400 hover:text-white cursor-pointer">Node 6</button>
+            <button type="button" data-node="node-7" class="core-node-pill px-2.5 py-1 rounded-lg font-medium transition text-purple-400 hover:text-purple-300 font-semibold cursor-pointer" title="GPU Node (64c + 4x A100)">Node 7⚡</button>
+            <button type="button" data-node="node-9" class="core-node-pill px-2.5 py-1 rounded-lg font-medium transition text-slate-400 hover:text-white cursor-pointer">Node 9</button>
+            <button type="button" data-node="node-11" class="core-node-pill px-2.5 py-1 rounded-lg font-medium transition text-slate-400 hover:text-white cursor-pointer">Node 11</button>
+          </div>
+
+          <span id="core-panel-sync-badge" class="px-2.5 py-1 rounded-lg text-[11px] font-mono bg-slate-800 text-slate-300 border border-slate-700 flex items-center space-x-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="core-panel-time">Realtime Monitor</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Realtime Core Metrics Cards (4 Stat Cards) -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <!-- Total Cores -->
+        <div class="bg-slate-950/70 p-3.5 sm:p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-slate-400 text-xs">
+            <span>Total Node Capacity</span>
+            <span class="text-blue-400 font-mono font-bold">100%</span>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-1.5">
+            <span id="metric-total-cores" class="text-2xl sm:text-3xl font-extrabold text-white font-mono">64</span>
+            <span class="text-xs text-slate-400">Total Cores</span>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
+            <span>Hardware Architecture</span>
+            <span class="font-mono text-slate-400">x86_64 SMP</span>
+          </div>
+        </div>
+
+        <!-- Consumed Cores -->
+        <div class="bg-slate-950/70 p-3.5 sm:p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-slate-400 text-xs">
+            <span>Consumed / Busy</span>
+            <span id="metric-consumed-pct" class="text-amber-400 font-mono font-bold">0.0%</span>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-1.5">
+            <span id="metric-consumed-cores" class="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono">0</span>
+            <span class="text-xs text-slate-400">/ 64 Cores</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
+            <div id="bar-consumed-cores" class="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Available Free Cores -->
+        <div class="bg-slate-950/70 p-3.5 sm:p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-slate-400 text-xs">
+            <span>Available / Free</span>
+            <span id="metric-free-pct" class="text-emerald-400 font-mono font-bold">100%</span>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-1.5">
+            <span id="metric-free-cores" class="text-2xl sm:text-3xl font-extrabold text-emerald-400 font-mono">64</span>
+            <span class="text-xs text-emerald-400/80 font-semibold">Cores Ready</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
+            <div id="bar-free-cores" class="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style="width: 100%"></div>
+          </div>
+        </div>
+
+        <!-- Realtime Workload & RAM -->
+        <div class="bg-slate-950/70 p-3.5 sm:p-4 rounded-xl border border-slate-800 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-slate-400 text-xs">
+            <span>Memory & Load</span>
+            <span id="metric-load-avg" class="text-blue-400 font-mono font-bold">Load: 0.12</span>
+          </div>
+          <div class="mt-2">
+            <div class="flex items-baseline space-x-1">
+              <span id="metric-ram-usage" class="text-base sm:text-lg font-bold text-slate-200 font-mono">12 / 256 GB</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-1.5 mt-1.5 overflow-hidden">
+              <div id="bar-ram-usage" class="bg-blue-500 h-1.5 rounded-full transition-all duration-500" style="width: 5%"></div>
+            </div>
+          </div>
+          <div class="mt-2 text-[11px] text-slate-400 flex items-center justify-between">
+            <span>RAM Allocation</span>
+            <span id="metric-ram-pct" class="font-mono text-slate-300">5% Allocated</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISUAL 64-CORE HARDWARE MATRIX MAP -->
+      <div class="bg-slate-950/90 rounded-xl p-4 border border-slate-800 space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-2">
+          <div class="flex items-center space-x-2">
+            <span class="font-semibold text-slate-300 font-mono">Physical 64-Core Hardware Matrix:</span>
+            <span class="text-slate-500 text-[11px] hidden sm:inline">(Hover over any core to inspect execution thread)</span>
+          </div>
+          <!-- Legend -->
+          <div class="flex items-center space-x-4 text-[11px] font-mono">
+            <span class="flex items-center space-x-1.5">
+              <span class="w-3 h-3 rounded bg-emerald-950 border border-emerald-500/80"></span>
+              <span class="text-emerald-400">Available (<span id="legend-free-count">64</span>)</span>
+            </span>
+            <span class="flex items-center space-x-1.5">
+              <span class="w-3 h-3 rounded bg-blue-600 border border-blue-400"></span>
+              <span class="text-blue-300">Consumed (<span id="legend-consumed-count">0</span>)</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- 64-Core Grid Container (Responsive: 16 cols on md+, 8 on sm) -->
+        <div id="cores-grid-container" class="grid grid-cols-8 md:grid-cols-[repeat(16,minmax(0,1fr))] gap-1.5 pt-1">
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="0" data-status="free"><span class="leading-none text-[8.5px]">c00</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="1" data-status="free"><span class="leading-none text-[8.5px]">c01</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="2" data-status="free"><span class="leading-none text-[8.5px]">c02</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="3" data-status="free"><span class="leading-none text-[8.5px]">c03</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="4" data-status="free"><span class="leading-none text-[8.5px]">c04</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="5" data-status="free"><span class="leading-none text-[8.5px]">c05</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="6" data-status="free"><span class="leading-none text-[8.5px]">c06</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="7" data-status="free"><span class="leading-none text-[8.5px]">c07</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="8" data-status="free"><span class="leading-none text-[8.5px]">c08</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="9" data-status="free"><span class="leading-none text-[8.5px]">c09</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="10" data-status="free"><span class="leading-none text-[8.5px]">c10</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="11" data-status="free"><span class="leading-none text-[8.5px]">c11</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="12" data-status="free"><span class="leading-none text-[8.5px]">c12</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="13" data-status="free"><span class="leading-none text-[8.5px]">c13</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="14" data-status="free"><span class="leading-none text-[8.5px]">c14</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="15" data-status="free"><span class="leading-none text-[8.5px]">c15</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="16" data-status="free"><span class="leading-none text-[8.5px]">c16</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="17" data-status="free"><span class="leading-none text-[8.5px]">c17</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="18" data-status="free"><span class="leading-none text-[8.5px]">c18</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="19" data-status="free"><span class="leading-none text-[8.5px]">c19</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="20" data-status="free"><span class="leading-none text-[8.5px]">c20</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="21" data-status="free"><span class="leading-none text-[8.5px]">c21</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="22" data-status="free"><span class="leading-none text-[8.5px]">c22</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="23" data-status="free"><span class="leading-none text-[8.5px]">c23</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="24" data-status="free"><span class="leading-none text-[8.5px]">c24</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="25" data-status="free"><span class="leading-none text-[8.5px]">c25</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="26" data-status="free"><span class="leading-none text-[8.5px]">c26</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="27" data-status="free"><span class="leading-none text-[8.5px]">c27</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="28" data-status="free"><span class="leading-none text-[8.5px]">c28</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="29" data-status="free"><span class="leading-none text-[8.5px]">c29</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="30" data-status="free"><span class="leading-none text-[8.5px]">c30</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="31" data-status="free"><span class="leading-none text-[8.5px]">c31</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="32" data-status="free"><span class="leading-none text-[8.5px]">c32</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="33" data-status="free"><span class="leading-none text-[8.5px]">c33</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="34" data-status="free"><span class="leading-none text-[8.5px]">c34</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="35" data-status="free"><span class="leading-none text-[8.5px]">c35</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="36" data-status="free"><span class="leading-none text-[8.5px]">c36</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="37" data-status="free"><span class="leading-none text-[8.5px]">c37</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="38" data-status="free"><span class="leading-none text-[8.5px]">c38</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="39" data-status="free"><span class="leading-none text-[8.5px]">c39</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="40" data-status="free"><span class="leading-none text-[8.5px]">c40</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="41" data-status="free"><span class="leading-none text-[8.5px]">c41</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="42" data-status="free"><span class="leading-none text-[8.5px]">c42</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="43" data-status="free"><span class="leading-none text-[8.5px]">c43</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="44" data-status="free"><span class="leading-none text-[8.5px]">c44</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="45" data-status="free"><span class="leading-none text-[8.5px]">c45</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="46" data-status="free"><span class="leading-none text-[8.5px]">c46</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="47" data-status="free"><span class="leading-none text-[8.5px]">c47</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="48" data-status="free"><span class="leading-none text-[8.5px]">c48</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="49" data-status="free"><span class="leading-none text-[8.5px]">c49</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="50" data-status="free"><span class="leading-none text-[8.5px]">c50</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="51" data-status="free"><span class="leading-none text-[8.5px]">c51</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="52" data-status="free"><span class="leading-none text-[8.5px]">c52</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="53" data-status="free"><span class="leading-none text-[8.5px]">c53</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="54" data-status="free"><span class="leading-none text-[8.5px]">c54</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="55" data-status="free"><span class="leading-none text-[8.5px]">c55</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="56" data-status="free"><span class="leading-none text-[8.5px]">c56</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="57" data-status="free"><span class="leading-none text-[8.5px]">c57</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="58" data-status="free"><span class="leading-none text-[8.5px]">c58</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="59" data-status="free"><span class="leading-none text-[8.5px]">c59</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="60" data-status="free"><span class="leading-none text-[8.5px]">c60</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="61" data-status="free"><span class="leading-none text-[8.5px]">c61</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="62" data-status="free"><span class="leading-none text-[8.5px]">c62</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="63" data-status="free"><span class="leading-none text-[8.5px]">c63</span><span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span></div>
+        </div>
+
+        <!-- Interactive Core Hover Details Bar -->
+        <div id="core-hover-detail" class="px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-400 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+          <span id="core-hover-text">Hover over any core tile above to inspect its execution thread.</span>
+          <span class="text-slate-600 text-[10px]">SMP Architecture • Core 00 to 63</span>
+        </div>
+      </div>
+
+      <!-- Active Workload Details on Selected Node -->
+      <div id="core-workload-container" class="bg-slate-950/60 rounded-xl p-4 border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs">
+        <div class="space-y-1">
+          <div class="flex items-center space-x-2">
+            <span class="text-slate-400 font-semibold">Active Workload:</span>
+            <span id="node-workload-title" class="font-bold text-white">Node compute queue is idle</span>
+            <span id="node-workload-badge" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">IDLE</span>
+          </div>
+          <p id="node-workload-desc" class="text-slate-400 text-[11px]">
+            No jobs are currently running on this node. All 64 cores are ready to accept batch jobs or reservations.
+          </p>
+        </div>
+
+        <!-- GPU strip for Node 7 (hidden for non-GPU nodes) -->
+        <div id="core-node-gpu-strip" class="hidden flex flex-wrap items-center gap-2">
+          <!-- Dynamically populated GPU badges for node-7 -->
+        </div>
+      </div>
+
+    </section>
+
     <!-- CALENDAR & TIME SLOT SCHEDULE -->
     <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
       
@@ -785,6 +1018,29 @@
           <p class="text-[11px] text-slate-500 mt-1">Start bridge via: <code class="text-blue-400">python telemetry-bridge.py</code></p>
         </div>
 
+        <!-- Client Setup Guide for Team/Other Users -->
+        <details class="text-xs bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-400">
+          <summary class="font-medium text-blue-400 cursor-pointer hover:underline select-none">
+            First time connecting? (Local Setup Steps)
+          </summary>
+          <div class="mt-2 space-y-2 text-slate-300 text-[11px] leading-relaxed">
+            <p>Because web browsers cannot make direct SSH connections, each user runs the lightweight bridge on their computer:</p>
+            <ol class="list-decimal pl-4 space-y-1 font-mono text-[10.5px]">
+              <li>Connect to Campus Wi-Fi / VPN (to reach 10.206.4.128).</li>
+              <li>Install requirement: <span class="text-emerald-400">pip install paramiko</span></li>
+              <li>Run bridge: <span class="text-emerald-400">python telemetry-bridge.py</span></li>
+            </ol>
+            <div class="p-2 rounded bg-amber-950/40 border border-amber-800/60 text-amber-200/90 text-[10.5px]">
+              <strong>Browser note for GitHub Pages (HTTPS):</strong> If connection fails with "Failed to fetch", click the lock/sliders icon beside the URL in the address bar &rarr; <em>Site settings</em> &rarr; set <strong>Insecure content</strong> to <strong>Allow</strong>, then reload this page.
+            </div>
+            <div class="pt-1">
+              <a href="telemetry-bridge.py" download="telemetry-bridge.py" class="inline-flex items-center space-x-1 text-xs text-blue-400 hover:text-blue-300 underline font-sans">
+                <span>⬇ Download telemetry-bridge.py script</span>
+              </a>
+            </div>
+          </div>
+        </details>
+
         <div id="ssh-status-box" class="p-3 rounded-lg text-xs hidden"></div>
 
         <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
@@ -818,6 +1074,6 @@
   </footer>
 
   <!-- APPLICATION ENTRY SCRIPT (Works directly on file://, localhost, and GitHub Pages) -->
-  <script src="./app.js"></script>
+  <script src="./app.js?v=2.1"></script>
 </body>
 </html>

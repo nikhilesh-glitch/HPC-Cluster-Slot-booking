@@ -59,8 +59,9 @@ def execute_remote_probe(client):
         "export PATH=$PATH:/usr/local/slurm/bin:/opt/slurm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; "
         "echo '===UPTIME==='; uptime 2>/dev/null; "
         "echo '===FREE==='; free -m 2>/dev/null; "
-        "echo '===SINFO==='; sinfo 2>&1; "
-        "echo '===SQUEUE==='; squeue 2>&1; "
+        "echo '===SINFO==='; sinfo --format='%P|%a|%l|%D|%T|%N' 2>&1 || sinfo 2>&1; "
+        "echo '===SQUEUE==='; squeue --format='%i|%P|%j|%u|%T|%M|%D|%R|%C' 2>&1 || squeue 2>&1; "
+        "echo '===NODECORES==='; sinfo -Node -o '%N|%C|%T' 2>/dev/null || true; "
         "echo '===GPU==='; which nvidia-smi >/dev/null 2>&1 && nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>/dev/null || echo 'NO_GPU'"
     )
     stdin, stdout, stderr = client.exec_command(cmd, timeout=8)
@@ -69,50 +70,201 @@ def execute_remote_probe(client):
 
 def parse_sinfo_lines(lines):
     rows = []
+    state_keywords = {"idle", "mixed", "mix", "alloc", "allocated", "down", "drain", "drained", "draining", "fail", "maint", "resv", "comp", "completing", "planned"}
+    
     header_idx = -1
+    col_map = {}
     for i, line in enumerate(lines):
-        if "PARTITION" in line and ("STATE" in line or "NODES" in line):
+        line_clean = line.strip().upper()
+        if "PARTITION" in line_clean and ("STATE" in line_clean or "NODES" in line_clean or "NODELIST" in line_clean):
             header_idx = i
+            tokens = [t.strip() for t in (line_clean.split("|") if "|" in line_clean else line_clean.split())]
+            for idx, tok in enumerate(tokens):
+                if "PARTITION" in tok: col_map["partition"] = idx
+                elif "AVAIL" in tok: col_map["avail"] = idx
+                elif "TIMELIM" in tok: col_map["timelimit"] = idx
+                elif "NODES" in tok and "LIST" not in tok: col_map["nodes"] = idx
+                elif "STATE" in tok: col_map["state"] = idx
+                elif "NODELIST" in tok or "NODE" in tok: col_map["nodelist"] = idx
             break
-            
-    data_lines = lines[header_idx + 1:] if header_idx != -1 else (lines[1:] if len(lines) > 1 else lines)
+
+    data_lines = lines[header_idx + 1:] if header_idx != -1 else lines
 
     for line in data_lines:
+        line = line.strip()
+        if not line or "===" in line or "PARTITION" in line.upper():
+            continue
+
+        if "|" in line:
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) >= 6:
+                rows.append({
+                    "partition": parts[0],
+                    "avail": parts[1],
+                    "timelimit": parts[2],
+                    "nodes": parts[3],
+                    "state": parts[4],
+                    "nodelist": parts[5]
+                })
+                continue
+
+        # Whitespace-delimited fallback
         parts = line.split()
-        if len(parts) >= 6:
-            rows.append({
-                "partition": parts[0],
-                "avail": parts[1],
-                "timelimit": parts[2],
-                "nodes": parts[3],
-                "state": parts[4],
-                "nodelist": parts[5]
-            })
+        if len(parts) < 4:
+            continue
+
+        row_partition = "compute"
+        row_avail = "up"
+        row_timelimit = "infinite"
+        row_nodes = "1"
+        row_state = "idle"
+        row_nodelist = ""
+
+        if col_map and len(parts) >= len(col_map):
+            row_partition = parts[col_map.get("partition", 0)] if col_map.get("partition", 0) < len(parts) else "compute"
+            row_avail = parts[col_map.get("avail", 1)] if col_map.get("avail", 1) < len(parts) else "up"
+            row_timelimit = parts[col_map.get("timelimit", 2)] if col_map.get("timelimit", 2) < len(parts) else "infinite"
+            row_nodes = parts[col_map.get("nodes", 3)] if col_map.get("nodes", 3) < len(parts) else "1"
+            row_state = parts[col_map.get("state", 4)] if col_map.get("state", 4) < len(parts) else "idle"
+            row_nodelist = parts[col_map.get("nodelist", 5)] if col_map.get("nodelist", 5) < len(parts) else ""
+        else:
+            # Detect shift where nodelist comes first (e.g. node[3,6] 2 compute mixed ...)
+            if parts[0].startswith("node") or "[" in parts[0] or "," in parts[0]:
+                row_nodelist = parts[0]
+                row_nodes = parts[1] if len(parts) > 1 else "1"
+                row_partition = parts[2] if len(parts) > 2 else "compute"
+                row_state = parts[3] if len(parts) > 3 else "idle"
+            else:
+                row_partition = parts[0]
+                row_avail = parts[1] if len(parts) > 1 else "up"
+                row_timelimit = parts[2] if len(parts) > 2 else "infinite"
+                row_nodes = parts[3] if len(parts) > 3 else "1"
+                row_state = parts[4] if len(parts) > 4 else "idle"
+                row_nodelist = parts[5] if len(parts) > 5 else ""
+
+        # Auto-correction: ensure row_state matches actual state keyword if swapped with nodes
+        if row_state.lower().strip("*") not in state_keywords:
+            for p in parts:
+                p_clean = p.lower().strip("*")
+                if p_clean in state_keywords:
+                    row_state = p_clean
+                    break
+
+        rows.append({
+            "partition": row_partition,
+            "avail": row_avail,
+            "timelimit": row_timelimit,
+            "nodes": row_nodes,
+            "state": row_state,
+            "nodelist": row_nodelist
+        })
     return rows
 
 def parse_squeue_lines(lines):
     jobs = []
     header_idx = -1
+    col_map = {}
     for i, line in enumerate(lines):
-        if "JOBID" in line and ("USER" in line or "ST" in line):
+        line_clean = line.strip().upper()
+        if "JOBID" in line_clean and ("USER" in line_clean or "ST" in line_clean or "STATE" in line_clean):
             header_idx = i
+            tokens = [t.strip() for t in (line_clean.split("|") if "|" in line_clean else line_clean.split())]
+            for idx, tok in enumerate(tokens):
+                if "JOBID" in tok: col_map["id"] = idx
+                elif "PARTITION" in tok: col_map["partition"] = idx
+                elif "NAME" in tok or "COMMAND" in tok: col_map["job"] = idx
+                elif "USER" in tok: col_map["user"] = idx
+                elif tok in ("ST", "STATE"): col_map["state"] = idx
+                elif "TIME" in tok: col_map["elapsed"] = idx
+                elif "NODES" in tok and "LIST" not in tok: col_map["nodes"] = idx
+                elif "NODELIST" in tok or "REASON" in tok: col_map["nodelist"] = idx
+                elif "CPUS" in tok or "MIN_CPUS" in tok: col_map["cores"] = idx
             break
-            
-    data_lines = lines[header_idx + 1:] if header_idx != -1 else (lines[1:] if len(lines) > 1 else lines)
+
+    data_lines = lines[header_idx + 1:] if header_idx != -1 else lines
 
     for line in data_lines:
-        parts = line.split(None, 7)
-        if len(parts) >= 6:
-            jobs.append({
-                "id": parts[0],
-                "partition": parts[1] if len(parts) > 1 else "compute",
-                "job": parts[2] if len(parts) > 2 else "job",
-                "user": parts[3] if len(parts) > 3 else "user",
-                "state": parts[4] if len(parts) > 4 else "R",
-                "elapsed": parts[5] if len(parts) > 5 else "00:00",
-                "nodes": parts[6] if len(parts) > 6 else "1",
-                "nodeList": parts[7] if len(parts) > 7 else ""
-            })
+        line = line.strip()
+        if not line or "===" in line or "JOBID" in line.upper():
+            continue
+
+        if "|" in line:
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) >= 8:
+                jobs.append({
+                    "id": parts[0],
+                    "partition": parts[1] if len(parts) > 1 else "compute",
+                    "job": parts[2] if len(parts) > 2 else "job",
+                    "user": parts[3] if len(parts) > 3 else "user",
+                    "state": parts[4] if len(parts) > 4 else "R",
+                    "elapsed": parts[5] if len(parts) > 5 else "00:00",
+                    "nodes": parts[6] if len(parts) > 6 else "1",
+                    "nodeList": parts[7] if len(parts) > 7 else "",
+                    "cores": parts[8] if len(parts) > 8 else "64"
+                })
+                continue
+
+        # Whitespace-delimited fallback
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+
+        j_id = parts[0]
+        j_part = "compute"
+        j_name = "job"
+        j_user = "user"
+        j_state = "R"
+        j_time = "00:00"
+        j_nodes = "1"
+        j_nodelist = ""
+        j_cores = "64"
+
+        valid_states = {"R", "PD", "CG", "CD", "CF", "F", "TO", "RUNNING", "PENDING"}
+        found_state = None
+        found_user = None
+        found_job = None
+
+        for p in parts:
+            if p.upper() in valid_states and not found_state:
+                found_state = p.upper()
+            elif (p.startswith("dr_") or "@" in p) and not found_user:
+                found_user = p
+            elif (p.endswith(".sh") or p.endswith(".py") or "_" in p) and not found_job and p != found_user:
+                found_job = p
+
+        if col_map and len(parts) >= len(col_map):
+            j_part = parts[col_map.get("partition", 1)] if col_map.get("partition", 1) < len(parts) else "compute"
+            j_name = parts[col_map.get("job", 2)] if col_map.get("job", 2) < len(parts) else "job"
+            j_user = parts[col_map.get("user", 3)] if col_map.get("user", 3) < len(parts) else "user"
+            j_state = parts[col_map.get("state", 4)] if col_map.get("state", 4) < len(parts) else "R"
+            j_time = parts[col_map.get("elapsed", 5)] if col_map.get("elapsed", 5) < len(parts) else "00:00"
+            j_nodes = parts[col_map.get("nodes", 6)] if col_map.get("nodes", 6) < len(parts) else "1"
+            j_nodelist = parts[col_map.get("nodelist", 7)] if col_map.get("nodelist", 7) < len(parts) else ""
+        else:
+            j_part = parts[1] if len(parts) > 1 else "compute"
+            j_name = parts[2] if len(parts) > 2 else "job"
+            j_user = parts[3] if len(parts) > 3 else "user"
+            j_state = parts[4] if len(parts) > 4 else "R"
+            j_time = parts[5] if len(parts) > 5 else "00:00"
+            j_nodes = parts[6] if len(parts) > 6 else "1"
+            j_nodelist = parts[7] if len(parts) > 7 else ""
+
+        # Auto-correct heuristics if shifted
+        if found_user: j_user = found_user
+        if found_job: j_name = found_job
+        if found_state: j_state = found_state
+
+        jobs.append({
+            "id": j_id,
+            "partition": j_part,
+            "job": j_name,
+            "user": j_user,
+            "state": j_state,
+            "elapsed": j_time,
+            "nodes": j_nodes,
+            "nodeList": j_nodelist,
+            "cores": j_cores
+        })
     return jobs
 
 def parse_probe_output(raw_output):
@@ -185,6 +337,32 @@ def parse_probe_output(raw_output):
                 except Exception:
                     pass
 
+    # 6. Parse Node Cores (sinfo -Node -o '%N|%C|%T')
+    node_cores = {}
+    node_core_lines = sections.get("NODECORES", [])
+    for line in node_core_lines:
+        line = line.strip()
+        if not line or "CPUS" in line:
+            continue
+        parts = line.split("|")
+        if len(parts) >= 2:
+            n_name = parts[0].strip()
+            c_info = parts[1].strip().split("/")
+            state = parts[2].strip() if len(parts) > 2 else ""
+            if len(c_info) >= 4:
+                try:
+                    alloc_c = int(c_info[0])
+                    idle_c = int(c_info[1])
+                    total_c = int(c_info[3])
+                    node_cores[n_name] = {
+                        "allocated": alloc_c,
+                        "idle": idle_c,
+                        "total": total_c,
+                        "state": state
+                    }
+                except Exception:
+                    pass
+
     return {
         "status": "ONLINE",
         "cpuLoadPercent": cpu_load_percent,
@@ -199,6 +377,7 @@ def parse_probe_output(raw_output):
         "squeue": active_jobs,
         "squeueRaw": squeue_raw,
         "gpuMetrics": gpu_metrics,
+        "nodeCores": node_cores,
         "timestamp": time.strftime("%H:%M:%S")
     }
 
@@ -207,6 +386,7 @@ class TelemetryBridgeHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -278,7 +458,7 @@ class TelemetryBridgeHandler(BaseHTTPRequestHandler):
                 }).encode('utf-8'))
                 return
             try:
-                cmd = "export PATH=$PATH:/usr/local/slurm/bin:/opt/slurm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; sinfo 2>&1"
+                cmd = "export PATH=$PATH:/usr/local/slurm/bin:/opt/slurm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; sinfo --format='%P|%a|%l|%D|%T|%N' 2>&1 || sinfo 2>&1"
                 stdin, stdout, stderr = ssh_client.exec_command(cmd, timeout=8)
                 raw = stdout.read().decode('utf-8', errors='replace')
                 rows = parse_sinfo_lines(raw.splitlines())
@@ -314,7 +494,7 @@ class TelemetryBridgeHandler(BaseHTTPRequestHandler):
                 }).encode('utf-8'))
                 return
             try:
-                cmd = "export PATH=$PATH:/usr/local/slurm/bin:/opt/slurm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; squeue 2>&1"
+                cmd = "export PATH=$PATH:/usr/local/slurm/bin:/opt/slurm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; squeue --format='%i|%P|%j|%u|%T|%M|%D|%R|%C' 2>&1 || squeue 2>&1"
                 stdin, stdout, stderr = ssh_client.exec_command(cmd, timeout=8)
                 raw = stdout.read().decode('utf-8', errors='replace')
                 jobs = parse_squeue_lines(raw.splitlines())

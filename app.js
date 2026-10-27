@@ -842,6 +842,31 @@ const el = {
   telemetryGpuContainer: document.getElementById('telemetry-gpu-container'),
   telemetryGpuGrid: document.getElementById('telemetry-gpu-grid'),
 
+  // Realtime Node Core Allocation Panel Elements
+  corePanelNodeTitle: document.getElementById('core-panel-node-title'),
+  corePanelStatusBadge: document.getElementById('core-panel-status-badge'),
+  corePanelNodeSpecs: document.getElementById('core-panel-node-specs'),
+  corePanelTime: document.getElementById('core-panel-time'),
+  metricTotalCores: document.getElementById('metric-total-cores'),
+  metricConsumedCores: document.getElementById('metric-consumed-cores'),
+  metricConsumedPct: document.getElementById('metric-consumed-pct'),
+  barConsumedCores: document.getElementById('bar-consumed-cores'),
+  metricFreeCores: document.getElementById('metric-free-cores'),
+  metricFreePct: document.getElementById('metric-free-pct'),
+  barFreeCores: document.getElementById('bar-free-cores'),
+  metricLoadAvg: document.getElementById('metric-load-avg'),
+  metricRamUsage: document.getElementById('metric-ram-usage'),
+  barRamUsage: document.getElementById('bar-ram-usage'),
+  metricRamPct: document.getElementById('metric-ram-pct'),
+  legendFreeCount: document.getElementById('legend-free-count'),
+  legendConsumedCount: document.getElementById('legend-consumed-count'),
+  coresGridContainer: document.getElementById('cores-grid-container'),
+  coreHoverText: document.getElementById('core-hover-text'),
+  nodeWorkloadTitle: document.getElementById('node-workload-title'),
+  nodeWorkloadBadge: document.getElementById('node-workload-badge'),
+  nodeWorkloadDesc: document.getElementById('node-workload-desc'),
+  coreNodeGpuStrip: document.getElementById('core-node-gpu-strip'),
+
   nodeButtons: document.querySelectorAll('.node-btn'),
 
   calendarHeaderTitle: document.getElementById('calendar-header-title'),
@@ -1099,6 +1124,252 @@ function renderTelemetry() {
 
   // Update dual Slurm panels (sinfo on left, squeue on right)
   renderSinfoAndSqueue();
+
+  // Update Realtime 64-Core Allocation & Availability Monitor Panel
+  renderCoreTelemetryPanel();
+}
+
+function renderCoreTelemetryPanel() {
+  const nodeId = state.currentNode || 'node-1';
+  const meta = TelemetryService.nodesMetadata[nodeId] || { 
+    name: nodeId, 
+    type: 'Shared Compute', 
+    cores: 64, 
+    totalRamGb: 256, 
+    gpus: 0, 
+    interconnect: 'Dual 100GbE', 
+    category: 'shared' 
+  };
+  const totalCores = meta.cores || 64;
+
+  const isLiveSsh = sshState.connected && Boolean(sshState.liveTelemetry);
+  const live = isLiveSsh ? sshState.liveTelemetry : null;
+
+  // 1. Update Title & Hardware Specs
+  if (el.corePanelNodeTitle) {
+    el.corePanelNodeTitle.textContent = meta.name;
+  }
+  if (el.corePanelNodeSpecs) {
+    el.corePanelNodeSpecs.textContent = `${totalCores} Cores CPU • ${meta.totalRamGb}GB RAM • ${meta.interconnect}${meta.gpus > 0 ? ' • ' + (meta.gpuModel || '4x NVIDIA A100') : ''}`;
+  }
+
+  // 2. Sync Quick Node Switcher Pills
+  document.querySelectorAll('.core-node-pill').forEach(pill => {
+    const pNode = pill.getAttribute('data-node');
+    if (pNode === nodeId) {
+      pill.className = 'core-node-pill px-2.5 py-1 rounded-lg font-bold transition bg-blue-600 text-white shadow-md shadow-blue-600/30 cursor-pointer';
+    } else if (pNode === 'node-7') {
+      pill.className = 'core-node-pill px-2.5 py-1 rounded-lg font-medium transition text-purple-400 hover:text-purple-300 font-semibold cursor-pointer';
+    } else {
+      pill.className = 'core-node-pill px-2.5 py-1 rounded-lg font-medium transition text-slate-400 hover:text-white cursor-pointer';
+    }
+  });
+
+  // 3. Compute Realtime Consumed vs Free Cores
+  let consumedCores = 0;
+  let activeJob = null;
+  let ramUsedGb = Math.round(meta.totalRamGb * 0.04);
+  let loadAvgStr = '0.08';
+  let timestampStr = isLiveSsh ? `${live.timestamp} (SSH Live 7s)` : `${new Date().toLocaleTimeString()} (Scheduled Mode)`;
+
+  if (isLiveSsh && live) {
+    // Check if live probe extracted exact nodeCores dictionary
+    const nodeKey = nodeId.replace('-', '');
+    const directCoreInfo = live.nodeCores && (live.nodeCores[nodeId] || live.nodeCores[nodeKey]);
+
+    if (directCoreInfo && typeof directCoreInfo.allocated === 'number') {
+      consumedCores = directCoreInfo.allocated;
+    } else {
+      // Find jobs running on this node in Slurm
+      const jobs = (live.activeJobs || live.squeue || []).filter(j => {
+        const nList = (j.nodeList || j.nodelist || '').toLowerCase();
+        return nList.includes(nodeId.toLowerCase()) || nList.includes(nodeKey.toLowerCase()) || (nodeId === 'node-1' && nList.includes('10.206.4.128'));
+      });
+
+      if (jobs.length > 0) {
+        jobs.forEach(j => {
+          const c = parseInt(j.cores, 10) || 64;
+          consumedCores += c;
+        });
+        activeJob = jobs[0];
+      } else if (nodeId === 'node-1' || nodeId === state.currentNode) {
+        // Fallback to instantaneous load from node
+        const loadPct = live.cpuLoadPercent || 0;
+        if (loadPct > 10) {
+          consumedCores = Math.round((loadPct / 100) * totalCores);
+        }
+      }
+    }
+
+    ramUsedGb = live.ramUsedGb || Math.round(meta.totalRamGb * 0.08);
+    const cpuPct = live.cpuLoadPercent || 5.0;
+    loadAvgStr = `Load: ${(cpuPct / 100 * totalCores).toFixed(2)}`;
+
+  } else {
+    // Scheduled Slot Booking Mode
+    const todayStr = CalendarService.formatDate(new Date());
+    const currentSlotKey = TelemetryService.getCurrentSlotKey();
+    const slotData = state.bookingsData?.nodes?.[nodeId]?.slots?.[todayStr]?.[currentSlotKey];
+
+    if (slotData && slotData.status === 'Booked') {
+      const match = (slotData.coresRequested || '').match(/\d+/);
+      const req = match ? parseInt(match[0], 10) : totalCores;
+      consumedCores = Math.min(req, totalCores);
+      activeJob = {
+        id: `SLOT-${currentSlotKey.replace(':', '')}`,
+        user: slotData.bookedBy,
+        dept: slotData.department,
+        role: slotData.role,
+        job: slotData.jobName || 'Reserved Research Workload',
+        cores: consumedCores
+      };
+      ramUsedGb = Math.round(meta.totalRamGb * (consumedCores / totalCores) * 0.75);
+      loadAvgStr = `Load: ${(consumedCores * 0.82).toFixed(1)}`;
+    } else {
+      consumedCores = 0;
+      ramUsedGb = Math.round(meta.totalRamGb * 0.04);
+      loadAvgStr = 'Load: 0.12';
+    }
+  }
+
+  // Constrain bounds
+  consumedCores = Math.max(0, Math.min(consumedCores, totalCores));
+  const freeCores = Math.max(0, totalCores - consumedCores);
+  const consumedPct = ((consumedCores / totalCores) * 100);
+  const freePct = ((freeCores / totalCores) * 100);
+
+  // 4. Update Header Badges & Timestamp
+  if (el.corePanelTime) {
+    el.corePanelTime.textContent = timestampStr;
+  }
+  if (el.corePanelStatusBadge) {
+    if (consumedCores === 0) {
+      el.corePanelStatusBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800';
+      el.corePanelStatusBadge.textContent = `● 64 / 64 Cores Available (100% Free)`;
+    } else if (freeCores === 0) {
+      el.corePanelStatusBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-950 text-rose-400 border border-rose-800';
+      el.corePanelStatusBadge.textContent = `● 0 / 64 Cores Free (Fully Allocated)`;
+    } else {
+      el.corePanelStatusBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-950 text-amber-300 border border-amber-800';
+      el.corePanelStatusBadge.textContent = `● ${freeCores} Cores Free (${consumedCores} Consumed)`;
+    }
+  }
+
+  // 5. Update Stat Metrics Cards
+  if (el.metricTotalCores) el.metricTotalCores.textContent = totalCores;
+  if (el.metricConsumedCores) el.metricConsumedCores.textContent = consumedCores;
+  if (el.metricConsumedPct) el.metricConsumedPct.textContent = `${consumedPct.toFixed(1)}%`;
+  if (el.barConsumedCores) el.barConsumedCores.style.width = `${consumedPct}%`;
+
+  if (el.metricFreeCores) el.metricFreeCores.textContent = freeCores;
+  if (el.metricFreePct) el.metricFreePct.textContent = `${freePct.toFixed(1)}%`;
+  if (el.barFreeCores) el.barFreeCores.style.width = `${freePct}%`;
+
+  if (el.legendFreeCount) el.legendFreeCount.textContent = freeCores;
+  if (el.legendConsumedCount) el.legendConsumedCount.textContent = consumedCores;
+
+  if (el.metricLoadAvg) el.metricLoadAvg.textContent = loadAvgStr;
+  if (el.metricRamUsage) el.metricRamUsage.textContent = `${ramUsedGb} / ${meta.totalRamGb} GB`;
+  const ramPct = Math.round((ramUsedGb / meta.totalRamGb) * 100);
+  if (el.barRamUsage) el.barRamUsage.style.width = `${ramPct}%`;
+  if (el.metricRamPct) el.metricRamPct.textContent = `${ramPct}% Allocated`;
+
+  // 6. Build the Visual 64-Core Hardware Matrix
+  if (el.coresGridContainer) {
+    let gridHtml = '';
+    for (let i = 0; i < totalCores; i++) {
+      const isBusy = i < consumedCores;
+      const corePad = String(i).padStart(2, '0');
+      if (isBusy) {
+        gridHtml += `
+          <div class="core-tile bg-blue-600/90 border border-blue-400 text-white font-mono text-[9px] font-bold py-1.5 px-0.5 rounded flex flex-col items-center justify-center shadow-sm shadow-blue-500/20 cursor-pointer transition transform hover:scale-110 select-none" data-core="${i}" data-status="busy">
+            <span class="leading-none text-[8.5px]">c${corePad}</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-blue-200 mt-0.5 animate-pulse"></span>
+          </div>
+        `;
+      } else {
+        gridHtml += `
+          <div class="core-tile bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-800/80 hover:border-emerald-500 text-emerald-400 font-mono text-[9px] font-medium py-1.5 px-0.5 rounded flex flex-col items-center justify-center cursor-pointer transition transform hover:scale-110 select-none" data-core="${i}" data-status="free">
+            <span class="leading-none text-[8.5px]">c${corePad}</span>
+            <span class="w-1 h-1 rounded-full bg-emerald-500/70 mt-0.5"></span>
+          </div>
+        `;
+      }
+    }
+    el.coresGridContainer.innerHTML = gridHtml;
+
+    // Attach interactive hover tooltips to each core
+    el.coresGridContainer.querySelectorAll('.core-tile').forEach(tile => {
+      tile.addEventListener('mouseenter', () => {
+        const cNum = tile.getAttribute('data-core');
+        const cStatus = tile.getAttribute('data-status');
+        const cPad = String(cNum).padStart(2, '0');
+        if (cStatus === 'busy') {
+          const userStr = activeJob ? `${activeJob.user || 'User'} (${activeJob.job || 'Active Job'})` : 'Cluster Batch Job';
+          if (el.coreHoverText) {
+            el.coreHoverText.innerHTML = `<span class="text-blue-400 font-bold">● Core #${cPad} [CONSUMED]</span> — Running execution thread assigned to: <strong>${userStr}</strong> (${consumedCores} cores allocated on ${meta.name})`;
+          }
+        } else {
+          if (el.coreHoverText) {
+            el.coreHoverText.innerHTML = `<span class="text-emerald-400 font-bold">● Core #${cPad} [AVAILABLE]</span> — Hardware thread is IDLE and available for immediate workload assignment.`;
+          }
+        }
+      });
+      tile.addEventListener('mouseleave', () => {
+        if (el.coreHoverText) {
+          el.coreHoverText.textContent = `Hover over any core tile above to inspect its execution thread (${freeCores} free, ${consumedCores} busy).`;
+        }
+      });
+    });
+  }
+
+  // 7. Active Workload Banner
+  if (activeJob) {
+    if (el.nodeWorkloadTitle) el.nodeWorkloadTitle.textContent = activeJob.job || 'Reserved HPC Compute Workload';
+    if (el.nodeWorkloadBadge) {
+      el.nodeWorkloadBadge.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800';
+      el.nodeWorkloadBadge.textContent = 'RUNNING';
+    }
+    if (el.nodeWorkloadDesc) {
+      el.nodeWorkloadDesc.textContent = `Assigned to ${activeJob.user || 'Authorized Researcher'} (${activeJob.dept || activeJob.role || 'Department Faculty/Staff'}) • Consuming ${consumedCores} of 64 physical cores.`;
+    }
+  } else {
+    if (el.nodeWorkloadTitle) el.nodeWorkloadTitle.textContent = 'Node compute queue is idle';
+    if (el.nodeWorkloadBadge) {
+      el.nodeWorkloadBadge.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700';
+      el.nodeWorkloadBadge.textContent = 'IDLE';
+    }
+    if (el.nodeWorkloadDesc) {
+      el.nodeWorkloadDesc.textContent = `No active jobs currently running on ${meta.name}. All 64 cores are ready to accept batch jobs or reservations.`;
+    }
+  }
+
+  // 8. GPU Strip for Node 7
+  if (el.coreNodeGpuStrip) {
+    if (meta.gpus > 0) {
+      el.coreNodeGpuStrip.classList.remove('hidden');
+      const gpus = (live && live.gpuMetrics && live.gpuMetrics.length > 0) 
+        ? live.gpuMetrics 
+        : [
+            { id: 0, name: 'A100 #0', util: consumedCores > 0 ? 88 : 0, memUsedGb: consumedCores > 0 ? 72.4 : 0.4, memTotalGb: 80, tempC: consumedCores > 0 ? 64 : 29 },
+            { id: 1, name: 'A100 #1', util: consumedCores > 0 ? 91 : 0, memUsedGb: consumedCores > 0 ? 74.1 : 0.4, memTotalGb: 80, tempC: consumedCores > 0 ? 66 : 29 },
+            { id: 2, name: 'A100 #2', util: consumedCores > 0 ? 85 : 0, memUsedGb: consumedCores > 0 ? 70.0 : 0.4, memTotalGb: 80, tempC: consumedCores > 0 ? 62 : 28 },
+            { id: 3, name: 'A100 #3', util: consumedCores > 0 ? 87 : 0, memUsedGb: consumedCores > 0 ? 71.2 : 0.4, memTotalGb: 80, tempC: consumedCores > 0 ? 63 : 28 }
+          ];
+
+      el.coreNodeGpuStrip.innerHTML = gpus.map(g => `
+        <div class="px-2.5 py-1 rounded-lg bg-purple-950/40 border border-purple-800/60 text-[10.5px] font-mono text-purple-200 flex items-center space-x-2">
+          <span class="font-bold text-purple-400">${g.name}</span>
+          <span class="text-slate-400">${g.memUsedGb}/${g.memTotalGb}GB</span>
+          <span class="px-1 rounded bg-purple-900/60 text-purple-300 font-semibold">${g.util}%</span>
+          <span class="text-slate-500">${g.tempC}°C</span>
+        </div>
+      `).join('');
+    } else {
+      el.coreNodeGpuStrip.classList.add('hidden');
+      el.coreNodeGpuStrip.innerHTML = '';
+    }
+  }
 }
 
 function renderSinfoAndSqueue() {
@@ -1111,6 +1382,61 @@ function renderSinfoAndSqueue() {
   let sinfoRows = (live && Array.isArray(live.sinfo) && live.sinfo.length > 0)
     ? live.sinfo
     : isLive ? [] : TelemetryService.getDefaultSinfo(state.bookingsData);
+
+  // Auto-heal shifted columns from Slurm custom/bare sinfo formats
+  const stateKeywords = ['idle', 'mixed', 'mix', 'alloc', 'allocated', 'down', 'drain', 'drained', 'draining', 'fail', 'maint', 'resv', 'comp', 'completing'];
+  sinfoRows = sinfoRows.map(row => {
+    let p = String(row.partition || '').trim();
+    let a = String(row.avail || '').trim();
+    let t = String(row.timelimit || '').trim();
+    let n = String(row.nodes || '').trim();
+    let s = String(row.state || '').trim();
+    let nl = String(row.nodelist || '').trim();
+
+    // Detect if column shift occurred: e.g. partition contains "node[3,6]"
+    if (p.toLowerCase().startsWith('node') || p.includes('[') || p.includes(',')) {
+      nl = p;
+      n = a || '1';
+      p = t || 'compute';
+      // Find actual state among shifted tokens
+      if (stateKeywords.some(k => String(row.nodes || '').toLowerCase().includes(k))) {
+        s = String(row.nodes);
+      } else if (stateKeywords.some(k => String(row.state || '').toLowerCase().includes(k))) {
+        s = String(row.state);
+      } else {
+        s = 'idle';
+      }
+      a = 'up';
+      t = 'infinite';
+    }
+
+    // Detect if nodes column holds the state keyword (e.g. nodes is "mixed" or "idle")
+    if (stateKeywords.some(k => n.toLowerCase().includes(k))) {
+      const realState = n;
+      n = (!isNaN(parseInt(a, 10))) ? a : '1';
+      s = realState;
+    }
+
+    // Ensure state keyword is properly extracted
+    if (!stateKeywords.some(k => s.toLowerCase().includes(k))) {
+      const candidates = [s, n, a, t, nl];
+      for (const cand of candidates) {
+        if (stateKeywords.some(k => cand.toLowerCase().includes(k))) {
+          s = cand;
+          break;
+        }
+      }
+    }
+
+    return {
+      partition: p || 'compute',
+      avail: a || 'up',
+      timelimit: t || 'infinite',
+      nodes: (!isNaN(parseInt(n, 10))) ? n : '1',
+      state: s || 'idle',
+      nodelist: nl
+    };
+  });
 
   if (el.sinfoTbody) {
     if (sinfoRows.length === 0) {
@@ -1183,6 +1509,42 @@ function renderSinfoAndSqueue() {
     : (live && Array.isArray(live.activeJobs))
     ? live.activeJobs
     : isLive ? [] : TelemetryService.getDefaultSqueue(state.bookingsData);
+
+  // Auto-heal shifted fields for squeue if custom columns were output by Slurm
+  const validStates = ['R', 'PD', 'CG', 'CD', 'CF', 'F', 'TO', 'RUNNING', 'PENDING', 'COMPLETED'];
+  squeueRows = squeueRows.map(job => {
+    let id = String(job.id || '').trim();
+    let part = String(job.partition || '').trim();
+    let jName = String(job.job || '').trim();
+    let uName = String(job.user || '').trim();
+    let st = String(job.state || '').trim().toUpperCase();
+    let elap = String(job.elapsed || '').trim();
+    let nCnt = String(job.nodes || '').trim();
+    let nLst = String(job.nodeList || job.nodelist || '').trim();
+
+    // Check if user holds a script name (.sh, .py) and state holds a username
+    if ((uName.includes('.sh') || uName.includes('.py')) && !validStates.includes(st)) {
+      const realUser = st.toLowerCase();
+      const realJob = uName;
+      uName = realUser;
+      jName = realJob;
+      st = 'R';
+    } else if (!validStates.includes(st) && (st.startsWith('DR_') || st.startsWith('USER') || st.includes('_'))) {
+      uName = st.toLowerCase();
+      st = 'R';
+    }
+
+    return {
+      id,
+      partition: part || 'compute',
+      job: jName || 'batch_job',
+      user: uName || 'user',
+      state: st || 'R',
+      elapsed: elap || '00:00',
+      nodes: nCnt || '1',
+      nodeList: nLst || '-'
+    };
+  });
 
   if (el.squeueTbody) {
     if (!squeueRows || squeueRows.length === 0) {
@@ -1595,6 +1957,7 @@ function executeBookingLocalOnly(nodeId, dateStr, slotKey, facultyInfo) {
   renderMonthCalendar();
   renderDaySlots();
   renderTelemetry();
+  renderCoreTelemetryPanel();
   showToast(`⚠️ Reserved locally only. Other faculty will not see this booking!`, 'warning');
 }
 
@@ -1703,6 +2066,7 @@ function executeModifyLocalOnly(nodeId, dateStr, slotKey, updatedInfo) {
   renderMonthCalendar();
   renderDaySlots();
   renderTelemetry();
+  renderCoreTelemetryPanel();
   showToast(`⚠️ Modified locally only. Not synced with other faculty!`, 'warning');
 }
 
@@ -1768,6 +2132,7 @@ function executeDeleteLocalOnly(nodeId, dateStr, slotKey) {
   renderMonthCalendar();
   renderDaySlots();
   renderTelemetry();
+  renderCoreTelemetryPanel();
   showToast(`⚠️ Slot released locally only. Not synced with other faculty!`, 'warning');
 }
 
@@ -1922,6 +2287,7 @@ async function loadBookings(showToastNotification = false) {
   renderMonthCalendar();
   renderDaySlots();
   renderTelemetry();
+  renderCoreTelemetryPanel();
 }
 
 // -------------------------------------------------------------
@@ -2067,9 +2433,21 @@ async function handleSshSubmit(e) {
   } catch (err) {
     sshState.connected = false;
     sshState.liveTelemetry = null;
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:' && bridgeUrl.startsWith('http://');
+    let helpHtml = `<span class="text-[11px] text-slate-400">1. Ensure you ran <code>python telemetry-bridge.py</code> locally on your machine.<br>2. Ensure you are connected to Campus Wi-Fi / VPN to reach ${host}.</span>`;
+    if (isHttps) {
+      helpHtml += `
+      <div class="mt-2 p-2 rounded bg-amber-950/70 border border-amber-800 text-[11px] text-amber-200 text-left">
+        <strong>⚠️ Browser Mixed-Content Restriction:</strong><br>
+        Because this portal runs on HTTPS, browsers block background calls to local <code>http://localhost</code> by default.<br>
+        <div class="mt-1 font-mono text-[10.5px] text-amber-100">
+          Fix: Click the site settings/lock icon in your browser URL bar &rarr; <em>Site settings</em> &rarr; set <strong>Insecure content</strong> to <strong>Allow</strong> &rarr; Refresh page.
+        </div>
+      </div>`;
+    }
     if (el.sshStatusBox) {
       el.sshStatusBox.className = 'p-3 rounded-lg text-xs bg-red-950/70 border border-red-800 text-red-200 block';
-      el.sshStatusBox.innerHTML = `⚠ Connection Failed: <strong>${err.message}</strong><br><span class="text-[11px] text-slate-400">Ensure the python telemetry bridge is running: <code>python telemetry-bridge.py</code></span>`;
+      el.sshStatusBox.innerHTML = `⚠ Connection Failed: <strong>${err.message}</strong><br>${helpHtml}`;
     }
     if (el.sshFeedIndicator) {
       el.sshFeedIndicator.className = 'h-2 w-2 rounded-full bg-red-500';
@@ -2241,8 +2619,24 @@ function setupEvents() {
       renderMonthCalendar();
       renderDaySlots();
       renderSinfoAndSqueue();
+      renderCoreTelemetryPanel();
     });
   }
+
+  // Quick Node Switcher Pills in Core Monitor Panel
+  document.querySelectorAll('.core-node-pill').forEach(pill => {
+    pill.addEventListener('click', (e) => {
+      const selected = e.currentTarget.getAttribute('data-node');
+      if (selected && selected !== state.currentNode) {
+        state.currentNode = selected;
+        if (el.calendarNodeSelector) el.calendarNodeSelector.value = selected;
+        renderMonthCalendar();
+        renderDaySlots();
+        renderSinfoAndSqueue();
+        renderCoreTelemetryPanel();
+      }
+    });
+  });
 
   // SINFO & SQUEUE Fetch Live Buttons
   if (el.btnFetchSinfo) el.btnFetchSinfo.addEventListener('click', handleFetchSinfo);
@@ -2440,6 +2834,8 @@ async function startApp() {
   renderMonthCalendar();
   renderDaySlots();
   renderTelemetry();
+  renderCoreTelemetryPanel();
+  renderCoreTelemetryPanel();
   await loadBookings();
 
   if (hadHashToken) {
