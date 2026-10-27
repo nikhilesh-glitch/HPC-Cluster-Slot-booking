@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "lastUpdated": "2026-10-27T07:14:26.533Z",
+  "lastUpdated": "2026-10-27T11:23:30.296Z",
   "nodes": {
     "node-1": {
       "name": "Node 1 (Shared Compute)",
@@ -307,7 +307,20 @@
       "name": "Node 3 (Shared Compute)",
       "specs": "64 Cores CPU, 256GB RAM (Shared across Faculty, Students, Staff)",
       "category": "shared",
-      "slots": {}
+      "slots": {
+        "2026-10-31": {
+          "09:00-13:00": {
+            "status": "Booked",
+            "bookedBy": "Dr. R. Kailasham",
+            "role": "Faculty Member",
+            "email": "rkailasham@iiti.ac.in",
+            "department": "Chemical Engineering",
+            "jobName": "Trial",
+            "coresRequested": "Full 64 Cores",
+            "bookedAt": "2026-10-27T11:23:29.665Z"
+          }
+        }
+      }
     },
     "node-4": {
       "name": "Node 4 (Shared Compute)",
