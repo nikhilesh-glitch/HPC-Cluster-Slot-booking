@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "lastUpdated": "2026-10-27T11:23:30.296Z",
+  "lastUpdated": "2026-10-27T11:24:08.914Z",
   "nodes": {
     "node-1": {
       "name": "Node 1 (Shared Compute)",
@@ -48,9 +48,10 @@
             "role": "Faculty Member",
             "email": "rkailasham@iiti.ac.in",
             "department": "Chemical Engineering",
-            "jobName": "ChE 605: Thermodynamics Group Project; Monte Carlo and Molecular Dynamics",
+            "jobName": "M.Tech",
             "coresRequested": "32 Cores",
-            "bookedAt": "2026-10-27T06:57:20.153Z"
+            "bookedAt": "2026-10-27T06:57:20.153Z",
+            "modifiedAt": "2026-10-27T11:24:08.267Z"
           }
         },
         "2026-11-01": {
