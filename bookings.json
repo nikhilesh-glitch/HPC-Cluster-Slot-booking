@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "lastUpdated": "2026-10-23T05:00:20.518Z",
+  "lastUpdated": "2026-10-28T09:48:22.036Z",
   "nodes": {
     "node-1": {
       "name": "Node 1 (Shared Compute)",
@@ -17,6 +17,18 @@
             "jobName": "Trial",
             "coresRequested": "Full 64 Cores",
             "bookedAt": "2026-10-23T05:00:20.518Z"
+          }
+        },
+        "2026-10-31": {
+          "09:00-13:00": {
+            "status": "Booked",
+            "bookedBy": "Dr. R. Kailasham",
+            "role": "Faculty Member",
+            "email": "rkailasham@iiti.ac.in",
+            "department": "Chemical Engineering",
+            "jobName": "M.Tech",
+            "coresRequested": "Full 64 Cores",
+            "bookedAt": "2026-10-28T09:48:21.486Z"
           }
         }
       }
