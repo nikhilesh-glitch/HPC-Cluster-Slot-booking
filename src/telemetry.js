@@ -1,127 +1,92 @@
 /**
  * HPC Slot Booking System - Cluster Telemetry Module
- * Monitors cluster node health, hardware utilization (CPU, RAM, GPU), and Slurm queue jobs.
+ * Configured for 8 Compute Nodes (Node 1 to Node 6, Node 9, Node 11) + 1 GPU Node (Node 7).
+ * All nodes have 64 cores each.
  */
 
 export const TelemetryService = {
-  // Pre-configured cluster specs
   nodesMetadata: {
-    'node-10': {
-      name: 'Node 10 (Exclusive Compute)',
-      type: 'CPU High-Compute',
-      cores: 64,
-      totalRamGb: 256,
-      gpus: 0,
-      interconnect: 'Dual 100GbE RoCE',
-      storage: '3.84TB NVMe Scratch'
-    },
-    'nodes-8-12': {
-      name: 'Nodes 8 & 12 (MPI Cluster)',
-      type: 'Distributed MPI',
-      cores: 96,
-      totalRamGb: 384,
-      gpus: 0,
-      interconnect: 'InfiniBand HDR 200Gb/s',
-      storage: '15TB Lustre Parallel FS'
-    },
-    'node-7-gpu': {
-      name: 'Node 7 (GPU Acceleration)',
-      type: 'GPU Dense Node',
-      cores: 32,
-      totalRamGb: 512,
-      gpus: 4,
-      gpuModel: 'NVIDIA A100-SXM4-80GB',
-      interconnect: 'NVLink 600GB/s + 200GbE',
-      storage: '7.68TB NVMe Gen4'
-    }
+    'node-1': { name: 'Node 1 (Shared Compute)', type: 'Shared Compute Node (Faculty, Students & Staff)', cores: 64, totalRamGb: 256, gpus: 0, interconnect: 'Dual 100GbE', category: 'shared' },
+    'node-2': { name: 'Node 2 (Shared Compute)', type: 'Shared Compute Node (Faculty, Students & Staff)', cores: 64, totalRamGb: 256, gpus: 0, interconnect: 'Dual 100GbE', category: 'shared' },
+    'node-3': { name: 'Node 3 (Shared Compute)', type: 'Shared Compute Node (Faculty, Students & Staff)', cores: 64, totalRamGb: 256, gpus: 0, interconnect: 'Dual 100GbE', category: 'shared' },
+    'node-4': { name: 'Node 4 (Shared Compute)', type: 'Shared Compute Node (Faculty, Students & Staff)', cores: 64, totalRamGb: 256, gpus: 0, interconnect: 'Dual 100GbE', category: 'shared' },
+    'node-5': { name: 'Node 5 (Shared Compute)', type: 'Shared Compute Node (Faculty, Students & Staff)', cores: 64, totalRamGb: 256, gpus: 0, interconnect: 'Dual 100GbE', category: 'shared' },
+    'node-6': { name: 'Node 6 (Shared Compute)', type: 'Shared Compute Node (Faculty, Students & Staff)', cores: 64, totalRamGb: 256, gpus: 0, interconnect: 'Dual 100GbE', category: 'shared' },
+    'node-7': { name: 'Node 7 (GPU Acceleration)', type: 'GPU Compute Node (64 Cores + 4x A100)', cores: 64, totalRamGb: 512, gpus: 4, gpuModel: '4x NVIDIA A100-80GB', interconnect: 'NVLink + 100GbE', category: 'gpu' },
+    'node-9': { name: 'Node 9 (Shared Compute)', type: 'Shared Compute Node (Faculty, Students & Staff)', cores: 64, totalRamGb: 256, gpus: 0, interconnect: 'Dual 100GbE', category: 'shared' },
+    'node-11': { name: 'Node 11 (Shared Compute)', type: 'Shared Compute Node (Faculty, Students & Staff)', cores: 64, totalRamGb: 256, gpus: 0, interconnect: 'Dual 100GbE', category: 'shared' }
   },
 
-  /**
-   * Generates realistic telemetry metrics based on current node and time of day.
-   */
-  getTelemetry(nodeId) {
-    const meta = this.nodesMetadata[nodeId] || {
-      name: nodeId,
-      type: 'Standard Compute',
-      cores: 32,
-      totalRamGb: 128,
-      gpus: 0
-    };
+  getCurrentSlotKey() {
+    const hour = new Date().getHours();
+    if (hour >= 9 && hour < 13) return '09:00-13:00';
+    if (hour >= 13 && hour < 17) return '13:00-17:00';
+    if (hour >= 17 && hour < 21) return '17:00-21:00';
+    return '21:00-09:00';
+  },
 
-    // Realistic load calculation
-    let cpuLoadPercent = 0;
-    let ramUsedGb = 0;
-    let gpuMetrics = [];
-    let powerWatts = 0;
-    let tempCelsius = 0;
+  getTelemetry(nodeId, bookingsData = null) {
+    const meta = this.nodesMetadata[nodeId] || { name: nodeId, cores: 64, totalRamGb: 256, gpus: 0 };
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${y}-${m}-${d}`;
+    const currentSlot = this.getCurrentSlotKey();
+
+    const slotData = bookingsData?.nodes?.[nodeId]?.slots?.[todayStr]?.[currentSlot];
+    const isSlotBooked = slotData && slotData.status === 'Booked';
+
+    let cpuLoadPercent = 0.5;
+    let ramUsedGb = Math.round(meta.totalRamGb * 0.03);
+    let powerWatts = 85;
+    let tempCelsius = 28;
     let activeJobs = [];
+    let gpuMetrics = [];
 
-    if (nodeId === 'node-10') {
-      cpuLoadPercent = 88.4;
-      ramUsedGb = 214;
-      powerWatts = 420;
-      tempCelsius = 54;
+    if (isSlotBooked) {
+      cpuLoadPercent = meta.gpus > 0 ? 45.2 : 88.4;
+      ramUsedGb = Math.round(meta.totalRamGb * 0.74);
+      powerWatts = meta.gpus > 0 ? 1280 : 395;
+      tempCelsius = meta.gpus > 0 ? 65 : 48;
+
       activeJobs = [
         {
-          id: 'slurm-89410',
-          user: 'Dr. Sarah Chen',
-          job: 'GATK_haplotype_caller.sh',
-          cores: 64,
-          elapsed: '03:12:45',
+          id: `slurm-${Math.floor(10000 + Math.random() * 89999)}`,
+          user: slotData.bookedBy || 'Authorized Researcher',
+          role: slotData.role || 'User',
+          job: slotData.jobName || 'Compute Workload',
+          cores: meta.cores,
+          gpus: meta.gpus,
+          elapsed: 'Active Slot',
           state: 'RUNNING'
         }
       ];
-    } else if (nodeId === 'nodes-8-12') {
-      cpuLoadPercent = 74.2;
-      ramUsedGb = 280;
-      powerWatts = 650;
-      tempCelsius = 49;
-      activeJobs = [
-        {
-          id: 'slurm-89392',
-          user: 'Dr. Marcus Vance',
-          job: 'openfoam_aerofoil_mpi',
-          cores: 96,
-          elapsed: '01:45:10',
-          state: 'RUNNING'
-        },
-        {
-          id: 'slurm-89415',
-          user: 'K. Patel (Ph.D.)',
-          job: 'lammps_md_simulation',
-          cores: 48,
-          elapsed: '00:00:00',
-          state: 'PENDING'
-        }
-      ];
-    } else if (nodeId === 'node-7-gpu') {
-      cpuLoadPercent = 45.1;
-      ramUsedGb = 398;
-      powerWatts = 1350;
-      tempCelsius = 68;
-      gpuMetrics = [
-        { id: 0, name: 'A100 #0', util: 96, memUsedGb: 78.4, memTotalGb: 80, tempC: 72 },
-        { id: 1, name: 'A100 #1', util: 98, memUsedGb: 78.4, memTotalGb: 80, tempC: 74 },
-        { id: 2, name: 'A100 #2', util: 94, memUsedGb: 78.4, memTotalGb: 80, tempC: 70 },
-        { id: 3, name: 'A100 #3', util: 91, memUsedGb: 76.2, memTotalGb: 80, tempC: 69 }
-      ];
-      activeJobs = [
-        {
-          id: 'slurm-89421',
-          user: 'Prof. Elena Rostova',
-          job: 'torchrun_foundation_v3.py',
-          cores: 32,
-          gpus: 4,
-          elapsed: '02:08:14',
-          state: 'RUNNING'
-        }
-      ];
+
+      if (meta.gpus > 0) {
+        gpuMetrics = [
+          { id: 0, name: 'A100 #0', util: 92, memUsedGb: 74.2, memTotalGb: 80, tempC: 66 },
+          { id: 1, name: 'A100 #1', util: 94, memUsedGb: 75.0, memTotalGb: 80, tempC: 68 },
+          { id: 2, name: 'A100 #2', util: 89, memUsedGb: 72.8, memTotalGb: 80, tempC: 64 },
+          { id: 3, name: 'A100 #3', util: 88, memUsedGb: 71.5, memTotalGb: 80, tempC: 63 }
+        ];
+      }
+    } else {
+      if (meta.gpus > 0) {
+        gpuMetrics = [
+          { id: 0, name: 'A100 #0', util: 0, memUsedGb: 0.4, memTotalGb: 80, tempC: 29 },
+          { id: 1, name: 'A100 #1', util: 0, memUsedGb: 0.4, memTotalGb: 80, tempC: 29 },
+          { id: 2, name: 'A100 #2', util: 0, memUsedGb: 0.4, memTotalGb: 80, tempC: 28 },
+          { id: 3, name: 'A100 #3', util: 0, memUsedGb: 0.4, memTotalGb: 80, tempC: 28 }
+        ];
+      }
     }
 
     return {
       nodeId,
       meta,
       status: 'ONLINE',
+      isBooked: isSlotBooked,
       cpuLoadPercent,
       ramUsedGb,
       ramPercent: Math.round((ramUsedGb / meta.totalRamGb) * 100),
@@ -129,7 +94,7 @@ export const TelemetryService = {
       tempCelsius,
       gpuMetrics,
       activeJobs,
-      timestamp: new Date().toLocaleTimeString()
+      timestamp: now.toLocaleTimeString()
     };
   }
 };

@@ -1,23 +1,28 @@
 /**
  * HPC Slot Booking System - Main Application Controller
+ * Provides full monthly calendar display, slot reservation, modification, deletion, and telemetry.
  */
 
 import { AuthManager } from './auth.js';
 import { GitHubApi } from './github-api.js';
-import { CalendarService } from './calendar.js';
+import { CalendarService, STANDARD_SLOTS } from './calendar.js';
 import { TelemetryService } from './telemetry.js';
 
 // Application State
+const now = new Date();
 const state = {
-  currentNode: 'node-10',
-  currentDate: CalendarService.formatDate(new Date()),
+  currentNode: 'node-1',
+  currentYear: now.getFullYear(),
+  currentMonth: now.getMonth(), // 0-11
+  currentDayDate: CalendarService.formatDate(now), // For Day Detail view
+  currentView: 'month', // 'month' or 'day'
   bookingsData: null,
-  activeSlotModal: null
+  activeSlot: null // { nodeId, dateStr, slotKey, details }
 };
 
 // DOM Elements
 const elements = {
-  // Sync & Status
+  // Sync & Top Status
   syncStatusBtn: document.getElementById('sync-status-btn'),
   syncIndicator: document.getElementById('sync-indicator'),
   syncLabel: document.getElementById('sync-label'),
@@ -25,16 +30,19 @@ const elements = {
   btnOpenSettings: document.getElementById('btn-open-settings'),
   btnAuthText: document.getElementById('btn-auth-text'),
 
-  // Telemetry
+  // Telemetry Section
   telemetryNodeTitle: document.getElementById('telemetry-node-title'),
   telemetryNodeSpecs: document.getElementById('telemetry-node-specs'),
   telemetryTime: document.getElementById('telemetry-time'),
   telemetryCpuVal: document.getElementById('telemetry-cpu-val'),
   telemetryCpuBar: document.getElementById('telemetry-cpu-bar'),
+  telemetryCoresInfo: document.getElementById('telemetry-cores-info'),
   telemetryRamVal: document.getElementById('telemetry-ram-val'),
   telemetryRamBar: document.getElementById('telemetry-ram-bar'),
+  telemetryRamPct: document.getElementById('telemetry-ram-pct'),
   telemetryTempVal: document.getElementById('telemetry-temp-val'),
   telemetryTempBar: document.getElementById('telemetry-temp-bar'),
+  telemetryJobStatus: document.getElementById('telemetry-job-status'),
   telemetryJobInfo: document.getElementById('telemetry-job-info'),
   telemetryJobUser: document.getElementById('telemetry-job-user'),
   telemetryGpuContainer: document.getElementById('telemetry-gpu-container'),
@@ -42,17 +50,33 @@ const elements = {
 
   // Node Selector
   nodeButtons: document.querySelectorAll('.node-btn'),
-  currentNodeTitle: document.getElementById('current-node-title'),
-  currentDateReadable: document.getElementById('current-date-readable'),
 
-  // Date Navigation
-  btnPrevDay: document.getElementById('btn-prev-day'),
-  btnNextDay: document.getElementById('btn-next-day'),
-  btnToday: document.getElementById('btn-today'),
-  btnTomorrow: document.getElementById('btn-tomorrow'),
-  datePickerInput: document.getElementById('date-picker-input'),
+  // Month Navigation & Header
+  calendarHeaderTitle: document.getElementById('calendar-header-title'),
+  currentMonthDisplay: document.getElementById('current-month-display'),
+  btnPrevMonth: document.getElementById('btn-prev-month'),
+  btnNextMonth: document.getElementById('btn-next-month'),
+  btnMonthToday: document.getElementById('btn-month-today'),
+  monthPickerInput: document.getElementById('month-picker-input'),
+  btnViewMonth: document.getElementById('btn-view-month'),
+  btnViewDay: document.getElementById('btn-view-day'),
 
-  // Slots Grid
+  // Monthly Stats
+  statMonthTotal: document.getElementById('stat-month-total'),
+  statMonthAvail: document.getElementById('stat-month-avail'),
+  statMonthBooked: document.getElementById('stat-month-booked'),
+  statMonthUtil: document.getElementById('stat-month-util'),
+  statMonthBar: document.getElementById('stat-month-bar'),
+
+  // Containers
+  monthViewContainer: document.getElementById('month-view-container'),
+  monthlyCalendarGrid: document.getElementById('monthly-calendar-grid'),
+  dayViewContainer: document.getElementById('day-view-container'),
+  dayViewDateTitle: document.getElementById('day-view-date-title'),
+  dayViewDatePicker: document.getElementById('day-view-date-picker'),
+  btnDayPrev: document.getElementById('btn-day-prev'),
+  btnDayNext: document.getElementById('btn-day-next'),
+  btnBackToMonth: document.getElementById('btn-back-to-month'),
   slotsGrid: document.getElementById('slots-grid'),
 
   // Booking Modal
@@ -70,13 +94,25 @@ const elements = {
   inputJobName: document.getElementById('input-job-name'),
   inputResources: document.getElementById('input-resources'),
 
-  // Details Modal
-  detailsModal: document.getElementById('details-modal'),
-  detailsModalBody: document.getElementById('details-modal-body'),
-  detailsSlurmCmd: document.getElementById('details-slurm-cmd'),
-  detailsCloseBtn: document.getElementById('details-close-btn'),
-  btnCloseDetails: document.getElementById('btn-close-details'),
-  btnReleaseSlot: document.getElementById('btn-release-slot'),
+  // Manage / Modify / Delete Modal
+  manageModal: document.getElementById('manage-modal'),
+  manageSlotDesc: document.getElementById('manage-slot-desc'),
+  manageBookedAt: document.getElementById('manage-booked-at'),
+  manageModifiedAt: document.getElementById('manage-modified-at'),
+  modifyForm: document.getElementById('modify-form'),
+  modifyFacultyName: document.getElementById('modify-faculty-name'),
+  modifyFacultyEmail: document.getElementById('modify-faculty-email'),
+  modifyFacultyDept: document.getElementById('modify-faculty-dept'),
+  modifyJobName: document.getElementById('modify-job-name'),
+  modifyResources: document.getElementById('modify-resources'),
+  manageSlurmCmd: document.getElementById('manage-slurm-cmd'),
+  btnCopySlurm: document.getElementById('btn-copy-slurm'),
+  btnDeleteSlot: document.getElementById('btn-delete-slot'),
+  btnCancelModify: document.getElementById('btn-cancel-modify'),
+  manageCloseBtn: document.getElementById('manage-close-btn'),
+  btnSaveModify: document.getElementById('btn-save-modify'),
+  modifySpinner: document.getElementById('modify-spinner'),
+  modifyLabel: document.getElementById('modify-label'),
 
   // Settings Modal
   settingsModal: document.getElementById('settings-modal'),
@@ -93,7 +129,7 @@ const elements = {
   btnClearSettings: document.getElementById('btn-clear-settings'),
   settingsStatusBox: document.getElementById('settings-status-box'),
 
-  // Toast
+  // Toast Container
   toastContainer: document.getElementById('toast-container')
 };
 
@@ -143,30 +179,44 @@ function updateSyncPill() {
  * Updates Telemetry Dashboard for active node
  */
 function renderTelemetry() {
-  const telemetry = TelemetryService.getTelemetry(state.currentNode);
+  const telemetry = TelemetryService.getTelemetry(state.currentNode, state.bookingsData);
   
   elements.telemetryNodeTitle.textContent = `${telemetry.meta.name} Live Telemetry`;
   elements.telemetryNodeSpecs.textContent = `${telemetry.meta.cores} Cores • ${telemetry.meta.totalRamGb}GB RAM • ${telemetry.meta.interconnect}`;
   elements.telemetryTime.textContent = telemetry.timestamp;
 
   // CPU
-  elements.telemetryCpuVal.textContent = `${telemetry.cpuLoadPercent}%`;
+  elements.telemetryCpuVal.textContent = `${telemetry.cpuLoadPercent.toFixed(1)}%`;
   elements.telemetryCpuBar.style.width = `${Math.min(telemetry.cpuLoadPercent, 100)}%`;
+  if (elements.telemetryCoresInfo) {
+    elements.telemetryCoresInfo.textContent = `${telemetry.meta.cores} Cores Active`;
+  }
 
   // RAM
   elements.telemetryRamVal.textContent = `${telemetry.ramUsedGb} / ${telemetry.meta.totalRamGb} GB`;
   elements.telemetryRamBar.style.width = `${telemetry.ramPercent}%`;
+  if (elements.telemetryRamPct) {
+    elements.telemetryRamPct.textContent = `${telemetry.ramPercent}% Allocated`;
+  }
 
   // Thermal
   elements.telemetryTempVal.textContent = `${telemetry.tempCelsius}°C • ${telemetry.powerWatts}W`;
   elements.telemetryTempBar.style.width = `${(telemetry.tempCelsius / 90) * 100}%`;
 
-  // Active Job
+  // Active Job & Slurm status
   if (telemetry.activeJobs.length > 0) {
     const job = telemetry.activeJobs[0];
+    if (elements.telemetryJobStatus) {
+      elements.telemetryJobStatus.className = 'px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800';
+      elements.telemetryJobStatus.textContent = 'RUNNING';
+    }
     elements.telemetryJobInfo.textContent = job.job;
-    elements.telemetryJobUser.textContent = `${job.user} • ${job.cores} Cores (${job.elapsed})`;
+    elements.telemetryJobUser.textContent = `${job.user} • ${job.cores} Cores`;
   } else {
+    if (elements.telemetryJobStatus) {
+      elements.telemetryJobStatus.className = 'px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700';
+      elements.telemetryJobStatus.textContent = 'IDLE';
+    }
     elements.telemetryJobInfo.textContent = 'No Active Workloads';
     elements.telemetryJobUser.textContent = 'Node compute queue is idle';
   }
@@ -195,18 +245,140 @@ function renderTelemetry() {
 }
 
 /**
- * Renders Slot Availability Cards
+ * Switches between 'month' and 'day' views
  */
-function renderSlots() {
+function switchView(viewName) {
+  state.currentView = viewName;
+  if (viewName === 'month') {
+    elements.monthViewContainer.classList.remove('hidden');
+    elements.dayViewContainer.classList.add('hidden');
+    elements.btnViewMonth.className = 'px-3 py-1 rounded-md text-xs font-semibold bg-blue-600 text-white transition';
+    elements.btnViewDay.className = 'px-3 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-slate-200 transition';
+    renderMonthCalendar();
+  } else {
+    elements.monthViewContainer.classList.add('hidden');
+    elements.dayViewContainer.classList.remove('hidden');
+    elements.btnViewDay.className = 'px-3 py-1 rounded-md text-xs font-semibold bg-blue-600 text-white transition';
+    elements.btnViewMonth.className = 'px-3 py-1 rounded-md text-xs font-medium text-slate-400 hover:text-slate-200 transition';
+    renderDaySlots();
+  }
+}
+
+/**
+ * Renders the Full Monthly Calendar Grid (All days & slots)
+ */
+function renderMonthCalendar() {
   if (!state.bookingsData) return;
 
-  const slots = CalendarService.getSlotsForDate(state.bookingsData, state.currentNode, state.currentDate);
-  elements.currentDateReadable.textContent = CalendarService.getReadableDate(state.currentDate);
-  elements.datePickerInput.value = state.currentDate;
-
-  // Header title update
   const nodeMeta = TelemetryService.nodesMetadata[state.currentNode];
-  elements.currentNodeTitle.textContent = `Slot Availability: ${nodeMeta ? nodeMeta.name : state.currentNode}`;
+  const monthName = CalendarService.getMonthYearLabel(state.currentYear, state.currentMonth);
+
+  elements.calendarHeaderTitle.textContent = `${nodeMeta?.name || state.currentNode}`;
+  elements.currentMonthDisplay.textContent = monthName;
+
+  // Sync native month picker
+  const pickerVal = `${state.currentYear}-${String(state.currentMonth + 1).padStart(2, '0')}`;
+  elements.monthPickerInput.value = pickerVal;
+
+  // Monthly Statistics
+  const stats = CalendarService.getMonthStats(state.bookingsData, state.currentNode, state.currentYear, state.currentMonth);
+  elements.statMonthTotal.textContent = `${stats.totalSlots} slots`;
+  elements.statMonthAvail.textContent = `${stats.availableCount} available`;
+  elements.statMonthBooked.textContent = `${stats.bookedCount} booked`;
+  elements.statMonthUtil.textContent = `${stats.utilizationPct}%`;
+  elements.statMonthBar.style.width = `${Math.min(stats.utilizationPct, 100)}%`;
+
+  // Generate 7-column month grid days
+  const days = CalendarService.getMonthGridDays(state.currentYear, state.currentMonth);
+
+  elements.monthlyCalendarGrid.innerHTML = days.map(day => {
+    const slots = CalendarService.getSlotsForDate(state.bookingsData, state.currentNode, day.dateStr);
+    const bookedSlots = slots.filter(s => s.status === 'Booked');
+    const isToday = day.isToday;
+    const isCurrent = day.isCurrentMonth;
+
+    const cellBg = !isCurrent ? 'bg-slate-950/40 opacity-45 border-slate-900' :
+                   isToday ? 'bg-slate-900 border-blue-500/80 shadow-lg shadow-blue-500/10 ring-1 ring-blue-500/50' :
+                   'bg-slate-950/80 border-slate-800 hover:border-slate-700';
+
+    return `
+      <div class="rounded-xl border p-2.5 flex flex-col justify-between min-h-[160px] transition-all group ${cellBg}">
+        <!-- Day Cell Header -->
+        <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800/80">
+          <button class="btn-inspect-day flex items-center space-x-1.5 hover:text-blue-400 transition" data-date="${day.dateStr}" title="Click to inspect this day in detail">
+            <span class="text-xs font-bold ${isToday ? 'w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center' : isCurrent ? 'text-slate-200' : 'text-slate-500'}">
+              ${day.dayNum}
+            </span>
+            ${isToday ? '<span class="text-[9px] px-1 py-0.2 rounded bg-blue-950 text-blue-300 font-semibold border border-blue-800">TODAY</span>' : ''}
+          </button>
+          
+          <span class="text-[10px] ${bookedSlots.length > 0 ? 'text-blue-400 font-medium' : 'text-slate-500'}">
+            ${bookedSlots.length > 0 ? `${bookedSlots.length} Booked` : 'All Open'}
+          </span>
+        </div>
+
+        <!-- 4 Slots List -->
+        <div class="space-y-1 flex-1 flex flex-col justify-center">
+          ${slots.map(slot => {
+            const isBooked = slot.status === 'Booked';
+            if (isBooked) {
+              const details = slot.details || {};
+              const facultyShort = details.bookedBy ? details.bookedBy.split(' ')[0] + ' ' + (details.bookedBy.split(' ')[1] || '') : 'Reserved';
+              return `
+                <button class="btn-manage-slot w-full text-left p-1 px-1.5 rounded bg-blue-950/80 hover:bg-blue-900 border border-blue-800/80 text-blue-200 hover:border-blue-600 transition flex items-center justify-between text-[10px] group/slot"
+                        data-node="${state.currentNode}" data-date="${day.dateStr}" data-slot="${slot.key}"
+                        title="Booked: ${details.bookedBy || 'Faculty'} (${slot.time}) - Click to Modify/Delete">
+                  <span class="truncate font-medium flex items-center space-x-1">
+                    <span>${slot.icon}</span>
+                    <strong class="text-blue-300">${slot.shortTime}</strong>
+                    <span class="truncate ml-1 text-slate-300">${facultyShort}</span>
+                  </span>
+                  <span class="text-[9px] text-blue-400 group-hover/slot:text-white font-bold ml-1">EDIT</span>
+                </button>
+              `;
+            }
+
+            // Available Slot Button
+            return `
+              <button class="btn-book-slot w-full text-left p-1 px-1.5 rounded bg-slate-900/60 hover:bg-emerald-950/40 border border-slate-800/80 hover:border-emerald-600/70 text-slate-400 hover:text-emerald-300 transition flex items-center justify-between text-[10px] group/slot"
+                      data-node="${state.currentNode}" data-date="${day.dateStr}" data-slot="${slot.key}"
+                      title="Available: ${slot.time} - Click to Reserve">
+                <span class="flex items-center space-x-1 font-mono">
+                  <span>${slot.icon}</span>
+                  <span>${slot.shortTime}</span>
+                </span>
+                <span class="text-[9px] text-emerald-400 group-hover/slot:text-emerald-300 font-semibold">+ Book</span>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Wire Day Inspect Buttons
+  document.querySelectorAll('.btn-inspect-day').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.currentDayDate = btn.dataset.date;
+      switchView('day');
+    });
+  });
+
+  // Wire Slot Action Buttons in Month View
+  attachSlotEventListeners();
+}
+
+/**
+ * Renders Single-Day Detail View (4 large interactive slot cards)
+ */
+function renderDaySlots() {
+  if (!state.bookingsData) return;
+
+  const nodeMeta = TelemetryService.nodesMetadata[state.currentNode];
+  elements.dayViewDateTitle.textContent = `${CalendarService.getReadableDate(state.currentDayDate)} (${nodeMeta?.name || state.currentNode})`;
+  elements.dayViewDatePicker.value = state.currentDayDate;
+
+  const slots = CalendarService.getSlotsForDate(state.bookingsData, state.currentNode, state.currentDayDate);
 
   elements.slotsGrid.innerHTML = slots.map(slot => {
     const isBooked = slot.status === 'Booked';
@@ -214,8 +386,7 @@ function renderSlots() {
     if (isBooked) {
       const details = slot.details || {};
       return `
-        <div class="bg-slate-950/90 border border-blue-900/60 rounded-xl p-5 flex flex-col justify-between shadow-lg relative overflow-hidden group">
-          <div class="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-bl-full pointer-events-none"></div>
+        <div class="bg-slate-950/90 border border-blue-900/80 rounded-xl p-5 flex flex-col justify-between shadow-lg relative overflow-hidden group">
           <div>
             <div class="flex items-center justify-between mb-3">
               <span class="text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-950 text-blue-300 border border-blue-800/80 flex items-center space-x-1">
@@ -240,8 +411,9 @@ function renderSlots() {
             </div>
           </div>
 
-          <button class="btn-slot-details w-full py-2 px-3 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition" data-slot="${slot.key}">
-            View Details & Cancel
+          <button class="btn-manage-slot w-full py-2 px-3 rounded-lg text-xs font-semibold bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-800 transition flex items-center justify-center space-x-1"
+                  data-node="${state.currentNode}" data-date="${state.currentDayDate}" data-slot="${slot.key}">
+            <span>Modify / Delete Booking</span>
           </button>
         </div>
       `;
@@ -264,7 +436,8 @@ function renderSlots() {
           <p class="text-xs text-slate-400 mb-4">Slot is open for immediate reservation by department faculty.</p>
         </div>
 
-        <button class="btn-book-slot w-full py-2 px-3 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 transition flex items-center justify-center space-x-1" data-slot="${slot.key}">
+        <button class="btn-book-slot w-full py-2 px-3 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 transition flex items-center justify-center space-x-1"
+                data-node="${state.currentNode}" data-date="${state.currentDayDate}" data-slot="${slot.key}">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
@@ -274,24 +447,36 @@ function renderSlots() {
     `;
   }).join('');
 
-  // Attach event handlers to slot buttons
+  attachSlotEventListeners();
+}
+
+/**
+ * Attaches click handlers to both Book and Manage buttons
+ */
+function attachSlotEventListeners() {
   document.querySelectorAll('.btn-book-slot').forEach(btn => {
-    btn.addEventListener('click', () => openBookingModal(btn.dataset.slot));
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openBookingModal(btn.dataset.node, btn.dataset.date, btn.dataset.slot);
+    });
   });
 
-  document.querySelectorAll('.btn-slot-details').forEach(btn => {
-    btn.addEventListener('click', () => openDetailsModal(btn.dataset.slot));
+  document.querySelectorAll('.btn-manage-slot').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openManageModal(btn.dataset.node, btn.dataset.date, btn.dataset.slot);
+    });
   });
 }
 
 /**
  * Opens Booking Modal
  */
-function openBookingModal(slotKey) {
-  state.activeSlotModal = { nodeId: state.currentNode, dateStr: state.currentDate, slotKey };
+function openBookingModal(nodeId, dateStr, slotKey) {
+  state.activeSlot = { nodeId, dateStr, slotKey };
 
-  const nodeMeta = TelemetryService.nodesMetadata[state.currentNode];
-  elements.modalSlotDesc.textContent = `${nodeMeta ? nodeMeta.name : state.currentNode} • ${state.currentDate} • Slot: ${slotKey}`;
+  const nodeMeta = TelemetryService.nodesMetadata[nodeId];
+  elements.modalSlotDesc.textContent = `${nodeMeta ? nodeMeta.name : nodeId} • ${dateStr} • Shift: ${slotKey}`;
 
   // Pre-fill profile
   const profile = AuthManager.getProfile();
@@ -309,7 +494,7 @@ function openBookingModal(slotKey) {
  */
 function closeBookingModal() {
   elements.bookingModal.classList.add('hidden');
-  state.activeSlotModal = null;
+  state.activeSlot = null;
 }
 
 /**
@@ -317,9 +502,9 @@ function closeBookingModal() {
  */
 async function handleBookingSubmit(e) {
   e.preventDefault();
-  if (!state.activeSlotModal) return;
+  if (!state.activeSlot) return;
 
-  const { nodeId, dateStr, slotKey } = state.activeSlotModal;
+  const { nodeId, dateStr, slotKey } = state.activeSlot;
   const facultyInfo = {
     name: elements.inputFacultyName.value.trim(),
     email: elements.inputFacultyEmail.value.trim(),
@@ -328,14 +513,12 @@ async function handleBookingSubmit(e) {
     coresRequested: elements.inputResources.value.trim()
   };
 
-  // Remember profile for convenience
   AuthManager.saveProfile({
     name: facultyInfo.name,
     email: facultyInfo.email,
     department: facultyInfo.department
   });
 
-  // UI loading state
   elements.submitBtnSpinner.classList.remove('hidden');
   elements.submitBtnLabel.textContent = 'Committing Booking...';
   elements.modalSubmitBtn.disabled = true;
@@ -346,8 +529,10 @@ async function handleBookingSubmit(e) {
     const result = await GitHubApi.updateBookings(updated, commitMsg);
 
     state.bookingsData = updated;
-    renderSlots();
     closeBookingModal();
+    renderMonthCalendar();
+    renderDaySlots();
+    renderTelemetry();
 
     if (result.source === 'github') {
       showToast(`Slot reserved & committed to GitHub (Commit: ${result.commit.slice(0, 7)})`, 'success');
@@ -365,64 +550,128 @@ async function handleBookingSubmit(e) {
 }
 
 /**
- * Opens Details & Cancellation Modal
+ * Opens Manage / Modify / Delete Modal
  */
-function openDetailsModal(slotKey) {
-  state.activeSlotModal = { nodeId: state.currentNode, dateStr: state.currentDate, slotKey };
-  const slots = CalendarService.getSlotsForDate(state.bookingsData, state.currentNode, state.currentDate);
+function openManageModal(nodeId, dateStr, slotKey) {
+  const slots = CalendarService.getSlotsForDate(state.bookingsData, nodeId, dateStr);
   const slot = slots.find(s => s.key === slotKey);
   const details = slot?.details || {};
 
-  elements.detailsModalBody.innerHTML = `
-    <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-1.5">
-      <div class="flex justify-between text-xs"><span class="text-slate-400">Node:</span> <span class="font-bold text-white">${state.currentNode}</span></div>
-      <div class="flex justify-between text-xs"><span class="text-slate-400">Date:</span> <span class="font-bold text-white">${state.currentDate}</span></div>
-      <div class="flex justify-between text-xs"><span class="text-slate-400">Time Block:</span> <span class="font-bold text-blue-400">${slotKey}</span></div>
-    </div>
-    <div class="space-y-1">
-      <div class="text-xs text-slate-400">Reserved by:</div>
-      <div class="font-semibold text-slate-100">${details.bookedBy || 'N/A'}</div>
-      <div class="text-xs text-slate-400">${details.email || ''} • ${details.department || ''}</div>
-    </div>
-    <div class="space-y-1">
-      <div class="text-xs text-slate-400">Workload / Job:</div>
-      <div class="text-xs font-mono text-blue-300 bg-slate-950 px-2 py-1 rounded border border-slate-800">${details.jobName || 'Compute Job'}</div>
-    </div>
-    <div class="text-[11px] text-slate-500">Booked at: ${details.bookedAt ? new Date(details.bookedAt).toLocaleString() : 'N/A'}</div>
-  `;
+  state.activeSlot = { nodeId, dateStr, slotKey, details };
 
-  elements.detailsSlurmCmd.textContent = `sbatch -w ${state.currentNode} --time=04:00:00 --job-name="${details.jobName || 'hpc_job'}" job.sh`;
-  elements.detailsModal.classList.remove('hidden');
+  const nodeMeta = TelemetryService.nodesMetadata[nodeId];
+  elements.manageSlotDesc.textContent = `${nodeMeta ? nodeMeta.name : nodeId} • ${dateStr} • Shift: ${slotKey}`;
+  elements.manageBookedAt.textContent = details.bookedAt ? new Date(details.bookedAt).toLocaleString() : 'N/A';
+  elements.manageModifiedAt.textContent = details.modifiedAt ? new Date(details.modifiedAt).toLocaleString() : 'Original Booking';
+
+  // Fill modify form
+  elements.modifyFacultyName.value = details.bookedBy || '';
+  elements.modifyFacultyEmail.value = details.email || '';
+  if (details.department) elements.modifyFacultyDept.value = details.department;
+  elements.modifyJobName.value = details.jobName || '';
+  elements.modifyResources.value = details.coresRequested || 'All available';
+
+  // Slurm command
+  elements.manageSlurmCmd.textContent = `sbatch -w ${nodeId} --job-name="${details.jobName || 'hpc_job'}" job.sh`;
+
+  elements.manageModal.classList.remove('hidden');
 }
 
 /**
- * Handles Cancellation / Slot Release
+ * Closes Manage Modal
  */
-async function handleReleaseSlot() {
-  if (!state.activeSlotModal) return;
+function closeManageModal() {
+  elements.manageModal.classList.add('hidden');
+  state.activeSlot = null;
+}
 
-  const { nodeId, dateStr, slotKey } = state.activeSlotModal;
-  const confirmed = window.confirm(`Are you sure you want to release the ${slotKey} slot on ${nodeId}?`);
+/**
+ * Handles Modification Submission
+ */
+async function handleModifySubmit(e) {
+  e.preventDefault();
+  if (!state.activeSlot) return;
+
+  const { nodeId, dateStr, slotKey } = state.activeSlot;
+  const updatedInfo = {
+    name: elements.modifyFacultyName.value.trim(),
+    email: elements.modifyFacultyEmail.value.trim(),
+    department: elements.modifyFacultyDept.value,
+    jobName: elements.modifyJobName.value.trim(),
+    coresRequested: elements.modifyResources.value.trim()
+  };
+
+  elements.modifySpinner.classList.remove('hidden');
+  elements.modifyLabel.textContent = 'Saving Changes...';
+  elements.btnSaveModify.disabled = true;
+
+  try {
+    const updated = CalendarService.modifyBooking(state.bookingsData, nodeId, dateStr, slotKey, updatedInfo);
+    const commitMsg = `Modify booking: ${nodeId} (${dateStr} ${slotKey}) for ${updatedInfo.name}`;
+    const result = await GitHubApi.updateBookings(updated, commitMsg);
+
+    state.bookingsData = updated;
+    closeManageModal();
+    renderMonthCalendar();
+    renderDaySlots();
+    renderTelemetry();
+
+    if (result.source === 'github') {
+      showToast(`Reservation modified & committed to GitHub!`, 'success');
+    } else {
+      showToast(`Reservation modified (saved locally)`, 'success');
+    }
+  } catch (err) {
+    console.error('Modify failed:', err);
+    showToast(`Modification error: ${err.message}`, 'error');
+  } finally {
+    elements.modifySpinner.classList.add('hidden');
+    elements.modifyLabel.textContent = 'Save Modifications';
+    elements.btnSaveModify.disabled = false;
+  }
+}
+
+/**
+ * Handles Deleting / Releasing a Booking
+ */
+async function handleDeleteSlot() {
+  if (!state.activeSlot) return;
+
+  const { nodeId, dateStr, slotKey } = state.activeSlot;
+  const confirmed = window.confirm(`Are you sure you want to release the ${slotKey} reservation on ${dateStr}?\nThis will make the slot available for other faculty.`);
   if (!confirmed) return;
 
   try {
     const updated = CalendarService.applyCancellation(state.bookingsData, nodeId, dateStr, slotKey);
-    const commitMsg = `Release slot: ${nodeId} (${dateStr} ${slotKey})`;
+    const commitMsg = `Release/Delete booking: ${nodeId} (${dateStr} ${slotKey})`;
     const result = await GitHubApi.updateBookings(updated, commitMsg);
 
     state.bookingsData = updated;
-    renderSlots();
-    elements.detailsModal.classList.add('hidden');
-    state.activeSlotModal = null;
+    closeManageModal();
+    renderMonthCalendar();
+    renderDaySlots();
+    renderTelemetry();
 
     if (result.source === 'github') {
-      showToast(`Slot released and committed to GitHub!`, 'success');
+      showToast(`Reservation deleted & slot released on GitHub!`, 'success');
     } else {
-      showToast(`Slot released (updated local state)`, 'success');
+      showToast(`Reservation deleted & slot released!`, 'success');
     }
   } catch (err) {
-    showToast(`Cancellation error: ${err.message}`, 'error');
+    showToast(`Deletion error: ${err.message}`, 'error');
   }
+}
+
+/**
+ * Copies Slurm quick command to clipboard
+ */
+function handleCopySlurm() {
+  const cmd = elements.manageSlurmCmd.textContent;
+  navigator.clipboard.writeText(cmd).then(() => {
+    showToast('Copied Slurm launch command to clipboard!', 'info');
+  }).catch(() => {
+    showToast('Failed to copy. Please manually select the command text.', 'error');
+  });
 }
 
 /**
@@ -516,7 +765,8 @@ async function loadBookings() {
   try {
     const res = await GitHubApi.getBookings();
     state.bookingsData = res.data;
-    renderSlots();
+    renderMonthCalendar();
+    renderDaySlots();
     renderTelemetry();
 
     if (res.source === 'github') {
@@ -529,7 +779,7 @@ async function loadBookings() {
 }
 
 /**
- * Setup Event Listeners
+ * Setup All Event Listeners
  */
 function setupEvents() {
   // Node buttons
@@ -541,43 +791,75 @@ function setupEvents() {
       btn.className = 'node-btn group p-4 rounded-xl border text-left transition relative bg-slate-900 border-blue-500 shadow-md shadow-blue-500/10 ring-1 ring-blue-500';
       state.currentNode = btn.dataset.node;
       renderTelemetry();
-      renderSlots();
+      renderMonthCalendar();
+      renderDaySlots();
     });
   });
 
-  // Date Navigation
-  elements.btnToday.addEventListener('click', () => {
-    state.currentDate = CalendarService.formatDate(new Date());
-    renderSlots();
+  // Month Navigation
+  elements.btnPrevMonth.addEventListener('click', () => {
+    if (state.currentMonth === 0) {
+      state.currentMonth = 11;
+      state.currentYear--;
+    } else {
+      state.currentMonth--;
+    }
+    renderMonthCalendar();
   });
 
-  elements.btnTomorrow.addEventListener('click', () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    state.currentDate = CalendarService.formatDate(tomorrow);
-    renderSlots();
+  elements.btnNextMonth.addEventListener('click', () => {
+    if (state.currentMonth === 11) {
+      state.currentMonth = 0;
+      state.currentYear++;
+    } else {
+      state.currentMonth++;
+    }
+    renderMonthCalendar();
   });
 
-  elements.btnPrevDay.addEventListener('click', () => {
-    const [y, m, d] = state.currentDate.split('-').map(Number);
+  elements.btnMonthToday.addEventListener('click', () => {
+    const today = new Date();
+    state.currentYear = today.getFullYear();
+    state.currentMonth = today.getMonth();
+    state.currentDayDate = CalendarService.formatDate(today);
+    renderMonthCalendar();
+  });
+
+  elements.monthPickerInput.addEventListener('change', (e) => {
+    if (e.target.value) {
+      const [y, m] = e.target.value.split('-').map(Number);
+      state.currentYear = y;
+      state.currentMonth = m - 1;
+      renderMonthCalendar();
+    }
+  });
+
+  // View Switcher
+  elements.btnViewMonth.addEventListener('click', () => switchView('month'));
+  elements.btnViewDay.addEventListener('click', () => switchView('day'));
+  elements.btnBackToMonth.addEventListener('click', () => switchView('month'));
+
+  // Day View Navigation
+  elements.btnDayPrev.addEventListener('click', () => {
+    const [y, m, d] = state.currentDayDate.split('-').map(Number);
     const date = new Date(y, m - 1, d);
     date.setDate(date.getDate() - 1);
-    state.currentDate = CalendarService.formatDate(date);
-    renderSlots();
+    state.currentDayDate = CalendarService.formatDate(date);
+    renderDaySlots();
   });
 
-  elements.btnNextDay.addEventListener('click', () => {
-    const [y, m, d] = state.currentDate.split('-').map(Number);
+  elements.btnDayNext.addEventListener('click', () => {
+    const [y, m, d] = state.currentDayDate.split('-').map(Number);
     const date = new Date(y, m - 1, d);
     date.setDate(date.getDate() + 1);
-    state.currentDate = CalendarService.formatDate(date);
-    renderSlots();
+    state.currentDayDate = CalendarService.formatDate(date);
+    renderDaySlots();
   });
 
-  elements.datePickerInput.addEventListener('change', (e) => {
+  elements.dayViewDatePicker.addEventListener('change', (e) => {
     if (e.target.value) {
-      state.currentDate = e.target.value;
-      renderSlots();
+      state.currentDayDate = e.target.value;
+      renderDaySlots();
     }
   });
 
@@ -600,10 +882,12 @@ function setupEvents() {
   elements.modalCancelBtn.addEventListener('click', closeBookingModal);
   elements.bookingForm.addEventListener('submit', handleBookingSubmit);
 
-  // Details Modal
-  elements.detailsCloseBtn.addEventListener('click', () => elements.detailsModal.classList.add('hidden'));
-  elements.btnCloseDetails.addEventListener('click', () => elements.detailsModal.classList.add('hidden'));
-  elements.btnReleaseSlot.addEventListener('click', handleReleaseSlot);
+  // Manage / Modify / Delete Modal
+  elements.manageCloseBtn.addEventListener('click', closeManageModal);
+  elements.btnCancelModify.addEventListener('click', closeManageModal);
+  elements.modifyForm.addEventListener('submit', handleModifySubmit);
+  elements.btnDeleteSlot.addEventListener('click', handleDeleteSlot);
+  elements.btnCopySlurm.addEventListener('click', handleCopySlurm);
 
   // Periodic telemetry refresh (every 8s)
   setInterval(() => {

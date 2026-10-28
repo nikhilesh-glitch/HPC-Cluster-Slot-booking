@@ -18,6 +18,9 @@ DEFAULT_SSH_PORT = 22
 DEFAULT_BRIDGE_PORT = 8080
 FETCH_INTERVAL_SEC = 7
 
+# Security: Only allow SSH connections to these trusted cluster hosts
+ALLOWED_SSH_HOSTS = {"10.206.4.128", "localhost", "127.0.0.1"}
+
 # Shared bridge state
 bridge_state = {
     "host": DEFAULT_CLUSTER_HOST,
@@ -526,6 +529,10 @@ class TelemetryBridgeHandler(BaseHTTPRequestHandler):
                 if not username or not password:
                     raise ValueError("SSH Username and Password are required.")
 
+                # Security: Validate target host against allowed cluster whitelist
+                if host not in ALLOWED_SSH_HOSTS:
+                    raise ValueError(f"Security restriction: Connection to host '{host}' is not permitted. Allowed: {', '.join(ALLOWED_SSH_HOSTS)}")
+
                 # Connect SSH
                 if ssh_client:
                     try: ssh_client.close()
@@ -579,6 +586,7 @@ def main():
     parser.add_argument("--webport", type=int, default=DEFAULT_BRIDGE_PORT, help="Bridge HTTP Port (default: 8080)")
     parser.add_argument("-u", "--user", help="SSH Username")
     parser.add_argument("-p", "--password", help="SSH Password")
+    parser.add_argument("--bind-all", action="store_true", help="Bind to 0.0.0.0 (expose bridge across local network). Default binds to 127.0.0.1 only.")
     args = parser.parse_args()
 
     bridge_state["host"] = args.host
@@ -595,12 +603,16 @@ def main():
         except Exception as e:
             print(f"⚠ Failed to connect to {args.host}: {e}")
 
-    server = HTTPServer(("0.0.0.0", args.webport), TelemetryBridgeHandler)
+    bind_host = "0.0.0.0" if args.bind_all else "127.0.0.1"
+    server = HTTPServer((bind_host, args.webport), TelemetryBridgeHandler)
     print("=" * 60)
     print(f"  HPC Cluster Live Telemetry Bridge Active")
     print(f"  Cluster IP Target:  {args.host}:{args.port}")
     print(f"  Refresh Interval:   {FETCH_INTERVAL_SEC} seconds")
+    print(f"  Bind Address:       {bind_host}:{args.webport}")
     print(f"  Local HTTP API:     http://localhost:{args.webport}")
+    if args.bind_all:
+        print(f"  ⚠ WARNING: Bridge exposed on ALL network interfaces (0.0.0.0)")
     print(f"  Web Dashboard:      Open index.html in your browser")
     print("=" * 60)
 

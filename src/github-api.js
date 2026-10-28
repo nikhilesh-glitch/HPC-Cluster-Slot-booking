@@ -6,7 +6,7 @@
 import { AuthManager } from './auth.js';
 
 let cachedSha = null;
-const LOCAL_STORAGE_FALLBACK = 'hpc_fallback_bookings';
+const LOCAL_STORAGE_FALLBACK = 'hpc_cluster_bookings_v2';
 
 function utf8ToBase64(str) {
   return window.btoa(unescape(encodeURIComponent(str)));

@@ -76,20 +76,33 @@ npm run dev
 
 To stream live hardware metrics and active Slurm jobs directly from cluster node `10.206.4.128`:
 
-1. **Launch the local SSH bridge**:
+1. **Prerequisites for Users**:
+   - Must be connected to the **Campus Wi-Fi or VPN** to reach the internal cluster IP `10.206.4.128`.
+   - Install required Python package:
+     ```bash
+     pip install paramiko
+     ```
+
+2. **Launch the local SSH bridge**:
    ```bash
    python telemetry-bridge.py
    ```
    The bridge runs a lightweight CORS HTTP server on `http://localhost:8080`.
 
-2. **Connect in the Web Portal**:
+3. **Browser Permission for GitHub Pages (HTTPS)**:
+   - When accessing the portal via GitHub Pages (`https://...`), web browsers block insecure background requests (`http://localhost:8080`) by default.
+   - **Fix in Chrome / Edge**: Click the settings/lock icon next to the address bar &rarr; **Site settings** &rarr; change **Insecure content** to **Allow** &rarr; refresh the page.
+
+4. **Connect in the Web Portal**:
    - Click the **Live Feed: 10.206.4.128** badge in the top navigation bar.
-   - Enter your cluster **SSH Username** and **Password** in the prompt.
+   - Enter your cluster **SSH Username** and **Password**.
    - Click **Connect & Stream (7s)**.
 
-3. **Real-time Monitoring**:
-   - Telemetry automatically refreshes **every 7 seconds**.
-   - Displays real CPU load percentage from `uptime`, RAM usage from `free -m`, active jobs from `squeue`, and GPU metrics from `nvidia-smi`.
+5. **Real-time 64-Core Hardware Monitoring**:
+   - Displays real-time **Consumed Cores** vs **Available Free Cores** for each selected node.
+   - Interactive 64-Core Hardware Matrix (`Core 00` to `Core 63`) with per-core thread hover inspection.
+   - Fast 1-click node switcher pills (Node 1 through Node 11 + GPU Node 7).
+   - Telemetry refreshes **every 7 seconds** with real CPU load from `uptime`, RAM usage from `free -m`, active jobs from `squeue`, core allocations from `sinfo -Node`, and GPU metrics from `nvidia-smi`.
    - Click the badge at any time to inspect connection health or disconnect.
 
 ---

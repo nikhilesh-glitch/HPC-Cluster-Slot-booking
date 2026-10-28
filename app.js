@@ -42,6 +42,22 @@ function base64ToUtf8(str) {
   return decodeURIComponent(escape(window.atob(str.replace(/\s/g, ''))));
 }
 
+// Security: HTML escape helper to prevent XSS from user-supplied booking fields
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Security: Sanitize job names for safe use in shell commands (sbatch)
+function sanitizeJobName(name) {
+  return (name || 'hpc_job').trim().replace(/[^a-zA-Z0-9_\-\.]/g, '_').substring(0, 32);
+}
+
 // -------------------------------------------------------------
 // Authentication & Settings Manager
 // -------------------------------------------------------------
@@ -424,6 +440,21 @@ const GitHubApi = {
           currentSha = checkData.sha;
           cachedSha = currentSha;
           const remoteJson = JSON.parse(base64ToUtf8(checkData.content));
+
+          // Security: Detect double-booking conflicts before merge
+          for (const [nodeId, nodeObj] of Object.entries(updatedData.nodes || {})) {
+            for (const [dateStr, daySlots] of Object.entries(nodeObj.slots || {})) {
+              for (const [slotKey, slotData] of Object.entries(daySlots || {})) {
+                const remoteSlot = remoteJson?.nodes?.[nodeId]?.slots?.[dateStr]?.[slotKey];
+                if (slotData.status === 'Booked' && remoteSlot && remoteSlot.status === 'Booked') {
+                  if (remoteSlot.bookedBy && slotData.bookedBy && remoteSlot.bookedBy !== slotData.bookedBy) {
+                    throw new Error(`Conflict: ${slotKey} on ${dateStr} was just reserved by ${remoteSlot.bookedBy}. Please refresh and pick another slot.`);
+                  }
+                }
+              }
+            }
+          }
+
           mergedData = this.mergeBookings(remoteJson, updatedData);
         }
       } catch (e) {
@@ -1312,7 +1343,7 @@ function renderCoreTelemetryPanel() {
         const cStatus = tile.getAttribute('data-status');
         const cPad = String(cNum).padStart(2, '0');
         if (cStatus === 'busy') {
-          const userStr = activeJob ? `${activeJob.user || 'User'} (${activeJob.job || 'Active Job'})` : 'Cluster Batch Job';
+          const userStr = activeJob ? `${escapeHtml(activeJob.user || 'User')} (${escapeHtml(activeJob.job || 'Active Job')})` : 'Cluster Batch Job';
           if (el.coreHoverText) {
             el.coreHoverText.innerHTML = `<span class="text-blue-400 font-bold">● Core #${cPad} [CONSUMED]</span> — Running execution thread assigned to: <strong>${userStr}</strong> (${consumedCores} cores allocated on ${meta.name})`;
           }
@@ -1772,13 +1803,13 @@ function renderMonthCalendar() {
               const isBooked = slot.status === 'Booked';
               if (isBooked) {
                 const details = slot.details || {};
-                const nameParts = (details.bookedBy || 'Reserved').split(' ');
+                const nameParts = (escapeHtml(details.bookedBy) || 'Reserved').split(' ');
                 const shortName = nameParts.length > 1 ? `${nameParts[0]} ${nameParts[1]}` : nameParts[0];
                 const roleBadge = details.role === 'Student' || details.role === 'Research Scholar / Student' ? '🎓' : details.role === 'Technical / Dept Staff' ? '🛠️' : '👨‍🏫';
                 return `
                   <button class="btn-manage-slot w-full text-left p-1 px-1.5 rounded-lg bg-blue-950/80 hover:bg-blue-900 border border-blue-800/80 hover:border-blue-500 text-blue-200 transition flex items-center justify-between text-[11px] group/slot"
                           data-node="${state.currentNode}" data-date="${day.dateStr}" data-slot="${slot.key}"
-                          title="Booked: ${details.bookedBy || ''} (${details.role || 'User'}) - Click to Modify / Delete">
+                          title="Booked: ${escapeHtml(details.bookedBy)} (${escapeHtml(details.role) || 'User'}) - Click to Modify / Delete">
                     <span class="truncate font-medium flex items-center space-x-1">
                       <span>${roleBadge}</span>
                       <strong class="text-blue-300 font-mono text-[10px]">${slot.shortTime.split('-')[0]}</strong>
@@ -1849,12 +1880,12 @@ function renderDaySlots() {
               <div class="space-y-1.5 mb-4 text-xs">
                 <div class="font-bold text-slate-100 flex items-center space-x-1.5">
                   <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                  <span>${details.bookedBy || 'Reserved'}</span>
-                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">${details.role || 'Faculty'}</span>
+                  <span>${escapeHtml(details.bookedBy) || 'Reserved'}</span>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">${escapeHtml(details.role) || 'Faculty'}</span>
                 </div>
-                <div class="text-[11px] text-slate-400 pl-5 truncate">${details.department || 'Department'} • ${details.email || ''}</div>
-                <div class="text-[11px] text-blue-400 pl-5 font-mono truncate">Job: ${details.jobName || 'Compute Job'}</div>
-                <div class="text-[11px] text-slate-500 pl-5 font-mono">Allocation: ${details.coresRequested || '64 Cores'}</div>
+                <div class="text-[11px] text-slate-400 pl-5 truncate">${escapeHtml(details.department) || 'Department'} • ${escapeHtml(details.email)}</div>
+                <div class="text-[11px] text-blue-400 pl-5 font-mono truncate">Job: ${escapeHtml(details.jobName) || 'Compute Job'}</div>
+                <div class="text-[11px] text-slate-500 pl-5 font-mono">Allocation: ${escapeHtml(details.coresRequested) || '64 Cores'}</div>
               </div>
             </div>
 
@@ -2110,7 +2141,7 @@ function openManageModal(nodeId, dateStr, slotKey) {
   if (el.modifyJobName) el.modifyJobName.value = details.jobName || '';
   if (el.modifyResources) el.modifyResources.value = details.coresRequested || '64 Cores';
 
-  if (el.manageSlurmCmd) el.manageSlurmCmd.textContent = `sbatch -w ${nodeId} -c 64 --job-name="${details.jobName || 'hpc_job'}" job.sh`;
+  if (el.manageSlurmCmd) el.manageSlurmCmd.textContent = `sbatch -w ${nodeId} -c 64 --job-name="${sanitizeJobName(details.jobName)}" job.sh`;
   if (el.manageModal) el.manageModal.classList.remove('hidden');
 }
 
