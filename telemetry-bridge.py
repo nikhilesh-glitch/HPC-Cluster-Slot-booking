@@ -381,46 +381,65 @@ def parse_probe_output(raw_output):
         "timestamp": time.strftime("%H:%M:%S")
     }
 
+CLIENT_DISCONNECT_ERRORS = (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)
+
 class TelemetryBridgeHandler(BaseHTTPRequestHandler):
+    def handle(self):
+        try:
+            super().handle()
+        except CLIENT_DISCONNECT_ERRORS:
+            # Client closed or reloaded browser tab during request processing
+            pass
+
     def send_cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
         self.send_header("Access-Control-Allow-Private-Network", "true")
 
+    def send_json_response(self, status, payload):
+        """Safely serializes and sends a JSON HTTP response, handling premature client disconnects."""
+        try:
+            body = json.dumps(payload).encode('utf-8')
+            self.send_response(status)
+            self.send_cors_headers()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except CLIENT_DISCONNECT_ERRORS:
+            pass
+        except Exception as e:
+            print(f"[BRIDGE] Warning sending response: {e}")
+
     def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_cors_headers()
-        self.end_headers()
+        try:
+            self.send_response(200)
+            self.send_cors_headers()
+            self.end_headers()
+        except CLIENT_DISCONNECT_ERRORS:
+            pass
 
     def do_GET(self):
         global ssh_client, bridge_state
         if self.path == "/api/status":
-            self.send_response(200)
-            self.send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({
+            self.send_json_response(200, {
                 "connected": bridge_state["connected"],
                 "host": bridge_state["host"],
                 "username": bridge_state["username"],
                 "interval": FETCH_INTERVAL_SEC,
                 "lastProbe": bridge_state["last_probe_time"],
                 "lastError": bridge_state["last_error"]
-            }).encode('utf-8'))
+            })
             return
 
         if self.path.startswith("/api/telemetry"):
             if not bridge_state["connected"] or not ssh_client:
-                self.send_response(200)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({
+                self.send_json_response(200, {
                     "connected": False,
                     "host": bridge_state["host"],
                     "error": "SSH session not connected. Post credentials to /api/connect."
-                }).encode('utf-8'))
+                })
                 return
 
             try:
@@ -430,98 +449,67 @@ class TelemetryBridgeHandler(BaseHTTPRequestHandler):
                 parsed["connected"] = True
                 bridge_state["latest_data"] = parsed
                 bridge_state["last_probe_time"] = parsed["timestamp"]
-
-                self.send_response(200)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps(parsed).encode('utf-8'))
+                self.send_json_response(200, parsed)
+            except CLIENT_DISCONNECT_ERRORS:
+                return
             except Exception as e:
                 bridge_state["last_error"] = str(e)
-                self.send_response(500)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"connected": False, "error": str(e)}).encode('utf-8'))
+                self.send_json_response(500, {"connected": False, "error": str(e)})
             return
 
         if self.path.startswith("/api/sinfo"):
             if not bridge_state["connected"] or not ssh_client:
-                self.send_response(200)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({
+                self.send_json_response(200, {
                     "success": False,
                     "connected": False,
                     "error": "SSH session not connected. Click Live Feed to connect."
-                }).encode('utf-8'))
+                })
                 return
             try:
                 cmd = "export PATH=$PATH:/usr/local/slurm/bin:/opt/slurm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; sinfo --format='%P|%a|%l|%D|%T|%N' 2>&1 || sinfo 2>&1"
                 stdin, stdout, stderr = ssh_client.exec_command(cmd, timeout=8)
                 raw = stdout.read().decode('utf-8', errors='replace')
                 rows = parse_sinfo_lines(raw.splitlines())
-                self.send_response(200)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({
+                self.send_json_response(200, {
                     "success": True,
                     "connected": True,
                     "raw": raw,
                     "data": rows,
                     "timestamp": time.strftime("%H:%M:%S")
-                }).encode('utf-8'))
+                })
+            except CLIENT_DISCONNECT_ERRORS:
+                return
             except Exception as e:
-                self.send_response(500)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "connected": False, "error": str(e)}).encode('utf-8'))
+                self.send_json_response(500, {"success": False, "connected": False, "error": str(e)})
             return
 
         if self.path.startswith("/api/squeue"):
             if not bridge_state["connected"] or not ssh_client:
-                self.send_response(200)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({
+                self.send_json_response(200, {
                     "success": False,
                     "connected": False,
                     "error": "SSH session not connected. Click Live Feed to connect."
-                }).encode('utf-8'))
+                })
                 return
             try:
                 cmd = "export PATH=$PATH:/usr/local/slurm/bin:/opt/slurm/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; squeue --format='%i|%P|%j|%u|%T|%M|%D|%R|%C' 2>&1 || squeue 2>&1"
                 stdin, stdout, stderr = ssh_client.exec_command(cmd, timeout=8)
                 raw = stdout.read().decode('utf-8', errors='replace')
                 jobs = parse_squeue_lines(raw.splitlines())
-                self.send_response(200)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({
+                self.send_json_response(200, {
                     "success": True,
                     "connected": True,
                     "raw": raw,
                     "data": jobs,
                     "timestamp": time.strftime("%H:%M:%S")
-                }).encode('utf-8'))
+                })
+            except CLIENT_DISCONNECT_ERRORS:
+                return
             except Exception as e:
-                self.send_response(500)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "connected": False, "error": str(e)}).encode('utf-8'))
+                self.send_json_response(500, {"success": False, "connected": False, "error": str(e)})
             return
 
-        self.send_response(404)
-        self.send_cors_headers()
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode('utf-8'))
+        self.send_json_response(404, {"error": "Endpoint not found"})
 
     def do_POST(self):
         global ssh_client, bridge_state
@@ -551,28 +539,22 @@ class TelemetryBridgeHandler(BaseHTTPRequestHandler):
                 bridge_state["last_error"] = None
                 bridge_state["last_probe_time"] = time.strftime("%H:%M:%S")
 
-                self.send_response(200)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({
+                self.send_json_response(200, {
                     "success": True,
                     "host": host,
                     "user": username,
                     "interval": FETCH_INTERVAL_SEC,
                     "message": f"Successfully connected to {host} over SSH. Live telemetry streaming every {FETCH_INTERVAL_SEC}s."
-                }).encode('utf-8'))
+                })
+            except CLIENT_DISCONNECT_ERRORS:
+                return
             except Exception as err:
                 bridge_state["connected"] = False
                 bridge_state["last_error"] = str(err)
-                self.send_response(400)
-                self.send_cors_headers()
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(json.dumps({
+                self.send_json_response(400, {
                     "success": False,
                     "error": str(err)
-                }).encode('utf-8'))
+                })
             return
 
         if self.path == "/api/disconnect":
@@ -581,18 +563,10 @@ class TelemetryBridgeHandler(BaseHTTPRequestHandler):
                 except: pass
             ssh_client = None
             bridge_state["connected"] = False
-            self.send_response(200)
-            self.send_cors_headers()
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"success": True, "message": "SSH session closed."}).encode('utf-8'))
+            self.send_json_response(200, {"success": True, "message": "SSH session closed."})
             return
 
-        self.send_response(404)
-        self.send_cors_headers()
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode('utf-8'))
+        self.send_json_response(404, {"error": "Endpoint not found"})
 
     def log_message(self, format, *args):
         # Quiet logger for recurring 7s polls

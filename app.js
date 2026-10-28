@@ -979,8 +979,13 @@ const el = {
   btnFetchSinfo: document.getElementById('btn-fetch-sinfo'),
   sinfoFetchIcon: document.getElementById('sinfo-fetch-icon'),
   sinfoFetchLabel: document.getElementById('sinfo-fetch-label'),
+  sinfoStatusBadge: document.getElementById('sinfo-status-badge'),
+  sinfoSubtitle: document.getElementById('sinfo-subtitle'),
+  sinfoIdleDot: document.getElementById('sinfo-idle-dot'),
   sinfoIdleCount: document.getElementById('sinfo-idle-count'),
+  sinfoAllocDot: document.getElementById('sinfo-alloc-dot'),
   sinfoAllocCount: document.getElementById('sinfo-alloc-count'),
+  sinfoFooterCluster: document.getElementById('sinfo-footer-cluster'),
 
   squeueTbody: document.getElementById('squeue-tbody'),
   squeueTableContainer: document.getElementById('squeue-table-container'),
@@ -990,6 +995,8 @@ const el = {
   squeueFetchIcon: document.getElementById('squeue-fetch-icon'),
   squeueFetchLabel: document.getElementById('squeue-fetch-label'),
   squeueCountBadge: document.getElementById('squeue-count-badge'),
+  squeueSubtitle: document.getElementById('squeue-subtitle'),
+  squeueFooterStatus: document.getElementById('squeue-footer-status'),
 
   // Calendar Node Selector Dropdown
   calendarNodeSelector: document.getElementById('calendar-node-selector'),
@@ -1373,240 +1380,326 @@ function renderCoreTelemetryPanel() {
 }
 
 function renderSinfoAndSqueue() {
-  const isLive = sshState.connected && Boolean(sshState.liveTelemetry);
+  const isLive = Boolean(sshState.connected && sshState.liveTelemetry);
   const live = isLive ? sshState.liveTelemetry : null;
 
   // -----------------------------------------------------------
   // 1. LEFT PANEL: sinfo (Cluster Partitions & Node States)
   // -----------------------------------------------------------
-  let sinfoRows = (live && Array.isArray(live.sinfo) && live.sinfo.length > 0)
-    ? live.sinfo
-    : isLive ? [] : TelemetryService.getDefaultSinfo(state.bookingsData);
-
-  // Auto-heal shifted columns from Slurm custom/bare sinfo formats
-  const stateKeywords = ['idle', 'mixed', 'mix', 'alloc', 'allocated', 'down', 'drain', 'drained', 'draining', 'fail', 'maint', 'resv', 'comp', 'completing'];
-  sinfoRows = sinfoRows.map(row => {
-    let p = String(row.partition || '').trim();
-    let a = String(row.avail || '').trim();
-    let t = String(row.timelimit || '').trim();
-    let n = String(row.nodes || '').trim();
-    let s = String(row.state || '').trim();
-    let nl = String(row.nodelist || '').trim();
-
-    // Detect if column shift occurred: e.g. partition contains "node[3,6]"
-    if (p.toLowerCase().startsWith('node') || p.includes('[') || p.includes(',')) {
-      nl = p;
-      n = a || '1';
-      p = t || 'compute';
-      // Find actual state among shifted tokens
-      if (stateKeywords.some(k => String(row.nodes || '').toLowerCase().includes(k))) {
-        s = String(row.nodes);
-      } else if (stateKeywords.some(k => String(row.state || '').toLowerCase().includes(k))) {
-        s = String(row.state);
-      } else {
-        s = 'idle';
-      }
-      a = 'up';
-      t = 'infinite';
+  if (!isLive) {
+    if (el.sinfoStatusBadge) {
+      el.sinfoStatusBadge.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-950/80 text-rose-300 border border-rose-800';
+      el.sinfoStatusBadge.textContent = 'Not Connected';
     }
-
-    // Detect if nodes column holds the state keyword (e.g. nodes is "mixed" or "idle")
-    if (stateKeywords.some(k => n.toLowerCase().includes(k))) {
-      const realState = n;
-      n = (!isNaN(parseInt(a, 10))) ? a : '1';
-      s = realState;
+    if (el.sinfoSubtitle) {
+      el.sinfoSubtitle.textContent = 'Cluster offline • Connect to 10.206.4.128';
     }
-
-    // Ensure state keyword is properly extracted
-    if (!stateKeywords.some(k => s.toLowerCase().includes(k))) {
-      const candidates = [s, n, a, t, nl];
-      for (const cand of candidates) {
-        if (stateKeywords.some(k => cand.toLowerCase().includes(k))) {
-          s = cand;
-          break;
-        }
-      }
+    if (el.sinfoIdleDot) el.sinfoIdleDot.className = 'w-2 h-2 rounded-full bg-slate-600';
+    if (el.sinfoIdleCount) {
+      el.sinfoIdleCount.textContent = '-- Idle';
+      el.sinfoIdleCount.className = 'font-medium text-slate-400';
     }
-
-    return {
-      partition: p || 'compute',
-      avail: a || 'up',
-      timelimit: t || 'infinite',
-      nodes: (!isNaN(parseInt(n, 10))) ? n : '1',
-      state: s || 'idle',
-      nodelist: nl
-    };
-  });
-
-  if (el.sinfoTbody) {
-    if (sinfoRows.length === 0) {
+    if (el.sinfoAllocDot) el.sinfoAllocDot.className = 'w-2 h-2 rounded-full bg-slate-600';
+    if (el.sinfoAllocCount) {
+      el.sinfoAllocCount.textContent = '-- Allocated';
+      el.sinfoAllocCount.className = 'font-medium text-slate-400';
+    }
+    if (el.sinfoFooterCluster) {
+      el.sinfoFooterCluster.textContent = 'Slurm Cluster • Not Connected';
+    }
+    if (el.sinfoTbody) {
       el.sinfoTbody.innerHTML = `
         <tr>
-          <td colspan="6" class="text-center py-7 text-slate-500">
-            <div class="flex flex-col items-center justify-center space-y-1">
-              <svg class="w-6 h-6 text-slate-600 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              <span class="text-xs font-medium text-slate-400">${isLive ? 'No partitions parsed from sinfo output.' : 'Click "Fetch Live" or connect SSH to retrieve partitions.'}</span>
-              ${isLive ? '<span class="text-[11px] text-slate-500">Toggle "Raw CLI" above to view raw server output.</span>' : ''}
+          <td colspan="6" class="text-center py-10 text-slate-500">
+            <div class="flex flex-col items-center justify-center space-y-2">
+              <div class="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center mb-1 border border-slate-700">
+                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <span class="text-xs font-semibold text-slate-300">Not Connected to Cluster</span>
+              <span class="text-[11px] text-slate-500 max-w-xs">Partition status and node states will activate once connected via SSH to 10.206.4.128.</span>
             </div>
           </td>
         </tr>
       `;
-    } else {
-      el.sinfoTbody.innerHTML = sinfoRows.map(row => {
-        const stateLower = (row.state || 'idle').toLowerCase();
-        let stateBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">idle</span>`;
-        if (stateLower.includes('mix')) {
-          stateBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-950 text-amber-300 border border-amber-800">mix</span>`;
-        } else if (stateLower.includes('alloc')) {
-          stateBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800">alloc</span>`;
-        } else if (stateLower.includes('down') || stateLower.includes('drain')) {
-          stateBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-950 text-red-300 border border-red-800">${row.state}</span>`;
-        }
+    }
+    if (el.sinfoRawContainer) {
+      el.sinfoRawContainer.textContent = '[Cluster Not Connected]\nPlease authenticate via the Live Feed button in the header or click "Fetch Live" to connect to 10.206.4.128.';
+    }
+  } else {
+    if (el.sinfoStatusBadge) {
+      el.sinfoStatusBadge.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800';
+      el.sinfoStatusBadge.textContent = 'Connected (Live)';
+    }
+    if (el.sinfoSubtitle) {
+      el.sinfoSubtitle.textContent = '8 Compute Nodes (64c) + 1 GPU Node (64c + 4x A100)';
+    }
+    if (el.sinfoIdleDot) el.sinfoIdleDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+    if (el.sinfoIdleCount) el.sinfoIdleCount.className = 'font-medium text-slate-300';
+    if (el.sinfoAllocDot) el.sinfoAllocDot.className = 'w-2 h-2 rounded-full bg-blue-400';
+    if (el.sinfoAllocCount) el.sinfoAllocCount.className = 'font-medium text-slate-300';
+    if (el.sinfoFooterCluster) {
+      el.sinfoFooterCluster.textContent = `Slurm Cluster • ${sshState.host || '10.206.4.128'}`;
+    }
 
-        return `
-          <tr class="hover:bg-slate-800/40 transition">
-            <td class="p-2.5 font-semibold text-slate-200">${row.partition}</td>
-            <td class="p-2.5 text-emerald-400 font-medium">${row.avail}</td>
-            <td class="p-2.5 text-slate-400">${row.timelimit}</td>
-            <td class="p-2.5 text-center text-slate-300 font-bold">${row.nodes}</td>
-            <td class="p-2.5">${stateBadge}</td>
-            <td class="p-2.5 font-bold text-slate-100">${row.nodelist}</td>
+    let sinfoRows = (live && Array.isArray(live.sinfo)) ? live.sinfo : [];
+
+    // Auto-heal shifted columns from Slurm custom/bare sinfo formats
+    const stateKeywords = ['idle', 'mixed', 'mix', 'alloc', 'allocated', 'down', 'drain', 'drained', 'draining', 'fail', 'maint', 'resv', 'comp', 'completing'];
+    sinfoRows = sinfoRows.map(row => {
+      let p = String(row.partition || '').trim();
+      let a = String(row.avail || '').trim();
+      let t = String(row.timelimit || '').trim();
+      let n = String(row.nodes || '').trim();
+      let s = String(row.state || '').trim();
+      let nl = String(row.nodelist || '').trim();
+
+      if (p.toLowerCase().startsWith('node') || p.includes('[') || p.includes(',')) {
+        nl = p;
+        n = a || '1';
+        p = t || 'compute';
+        if (stateKeywords.some(k => String(row.nodes || '').toLowerCase().includes(k))) {
+          s = String(row.nodes);
+        } else if (stateKeywords.some(k => String(row.state || '').toLowerCase().includes(k))) {
+          s = String(row.state);
+        } else {
+          s = 'idle';
+        }
+        a = 'up';
+        t = 'infinite';
+      }
+
+      if (stateKeywords.some(k => n.toLowerCase().includes(k))) {
+        const realState = n;
+        n = (!isNaN(parseInt(a, 10))) ? a : '1';
+        s = realState;
+      }
+
+      if (!stateKeywords.some(k => s.toLowerCase().includes(k))) {
+        const candidates = [s, n, a, t, nl];
+        for (const cand of candidates) {
+          if (stateKeywords.some(k => cand.toLowerCase().includes(k))) {
+            s = cand;
+            break;
+          }
+        }
+      }
+
+      return {
+        partition: p || 'compute',
+        avail: a || 'up',
+        timelimit: t || 'infinite',
+        nodes: (!isNaN(parseInt(n, 10))) ? n : '1',
+        state: s || 'idle',
+        nodelist: nl
+      };
+    });
+
+    if (el.sinfoTbody) {
+      if (sinfoRows.length === 0) {
+        el.sinfoTbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="text-center py-7 text-slate-500">
+              <div class="flex flex-col items-center justify-center space-y-1">
+                <svg class="w-6 h-6 text-slate-600 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span class="text-xs font-medium text-slate-400">No partitions parsed from sinfo output.</span>
+                <span class="text-[11px] text-slate-500">Toggle "Raw CLI" above to view raw server output.</span>
+              </div>
+            </td>
           </tr>
         `;
-      }).join('');
-    }
-  }
+      } else {
+        el.sinfoTbody.innerHTML = sinfoRows.map(row => {
+          const stateLower = (row.state || 'idle').toLowerCase();
+          let stateBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">idle</span>`;
+          if (stateLower.includes('mix')) {
+            stateBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-950 text-amber-300 border border-amber-800">mix</span>`;
+          } else if (stateLower.includes('alloc')) {
+            stateBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-950 text-blue-300 border border-blue-800">alloc</span>`;
+          } else if (stateLower.includes('down') || stateLower.includes('drain')) {
+            stateBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-950 text-red-300 border border-red-800">${row.state}</span>`;
+          }
 
-  // Count idle & allocated/mixed nodes
-  let idleCount = 0;
-  let allocCount = 0;
-  sinfoRows.forEach(r => {
-    const num = parseInt(r.nodes, 10) || 1;
-    const st = (r.state || '').toLowerCase();
-    if (st.includes('idle')) idleCount += num;
-    else if (st.includes('alloc') || st.includes('mix')) allocCount += num;
-  });
-  if (el.sinfoIdleCount) el.sinfoIdleCount.textContent = `${idleCount} Idle`;
-  if (el.sinfoAllocCount) el.sinfoAllocCount.textContent = `${allocCount} Allocated`;
-
-  // Render Sinfo Raw CLI
-  if (el.sinfoRawContainer) {
-    let rawText = (live && live.sinfoRaw) ? live.sinfoRaw : '';
-    if (!rawText) {
-      rawText = 'PARTITION  AVAIL  TIMELIMIT  NODES  STATE NODELIST\n';
-      sinfoRows.forEach(r => {
-        rawText += `${r.partition.padEnd(11)}${r.avail.padEnd(7)}${r.timelimit.padEnd(11)}${String(r.nodes).padEnd(7)}${r.state.padEnd(6)}${r.nodelist}\n`;
-      });
+          return `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="p-2.5 font-semibold text-slate-200">${row.partition}</td>
+              <td class="p-2.5 text-emerald-400 font-medium">${row.avail}</td>
+              <td class="p-2.5 text-slate-400">${row.timelimit}</td>
+              <td class="p-2.5 text-center text-slate-300 font-bold">${row.nodes}</td>
+              <td class="p-2.5">${stateBadge}</td>
+              <td class="p-2.5 font-bold text-slate-100">${row.nodelist}</td>
+            </tr>
+          `;
+        }).join('');
+      }
     }
-    el.sinfoRawContainer.textContent = rawText.trim();
+
+    let idleCount = 0;
+    let allocCount = 0;
+    sinfoRows.forEach(r => {
+      const num = parseInt(r.nodes, 10) || 1;
+      const st = (r.state || '').toLowerCase();
+      if (st.includes('idle')) idleCount += num;
+      else if (st.includes('alloc') || st.includes('mix')) allocCount += num;
+    });
+    if (el.sinfoIdleCount) el.sinfoIdleCount.textContent = `${idleCount} Idle`;
+    if (el.sinfoAllocCount) el.sinfoAllocCount.textContent = `${allocCount} Allocated`;
+
+    if (el.sinfoRawContainer) {
+      let rawText = (live && live.sinfoRaw) ? live.sinfoRaw : '';
+      if (!rawText) {
+        rawText = 'PARTITION  AVAIL  TIMELIMIT  NODES  STATE NODELIST\n';
+        sinfoRows.forEach(r => {
+          rawText += `${r.partition.padEnd(11)}${r.avail.padEnd(7)}${r.timelimit.padEnd(11)}${String(r.nodes).padEnd(7)}${r.state.padEnd(6)}${r.nodelist}\n`;
+        });
+      }
+      el.sinfoRawContainer.textContent = rawText.trim();
+    }
   }
 
   // -----------------------------------------------------------
   // 2. RIGHT PANEL: squeue (Active & Queued Batch Jobs)
   // -----------------------------------------------------------
-  let squeueRows = (live && Array.isArray(live.squeue))
-    ? live.squeue
-    : (live && Array.isArray(live.activeJobs))
-    ? live.activeJobs
-    : isLive ? [] : TelemetryService.getDefaultSqueue(state.bookingsData);
-
-  // Auto-heal shifted fields for squeue if custom columns were output by Slurm
-  const validStates = ['R', 'PD', 'CG', 'CD', 'CF', 'F', 'TO', 'RUNNING', 'PENDING', 'COMPLETED'];
-  squeueRows = squeueRows.map(job => {
-    let id = String(job.id || '').trim();
-    let part = String(job.partition || '').trim();
-    let jName = String(job.job || '').trim();
-    let uName = String(job.user || '').trim();
-    let st = String(job.state || '').trim().toUpperCase();
-    let elap = String(job.elapsed || '').trim();
-    let nCnt = String(job.nodes || '').trim();
-    let nLst = String(job.nodeList || job.nodelist || '').trim();
-
-    // Check if user holds a script name (.sh, .py) and state holds a username
-    if ((uName.includes('.sh') || uName.includes('.py')) && !validStates.includes(st)) {
-      const realUser = st.toLowerCase();
-      const realJob = uName;
-      uName = realUser;
-      jName = realJob;
-      st = 'R';
-    } else if (!validStates.includes(st) && (st.startsWith('DR_') || st.startsWith('USER') || st.includes('_'))) {
-      uName = st.toLowerCase();
-      st = 'R';
+  if (!isLive) {
+    if (el.squeueCountBadge) {
+      el.squeueCountBadge.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-950/80 text-rose-300 border border-rose-800';
+      el.squeueCountBadge.textContent = 'Not Connected';
     }
-
-    return {
-      id,
-      partition: part || 'compute',
-      job: jName || 'batch_job',
-      user: uName || 'user',
-      state: st || 'R',
-      elapsed: elap || '00:00',
-      nodes: nCnt || '1',
-      nodeList: nLst || '-'
-    };
-  });
-
-  if (el.squeueTbody) {
-    if (!squeueRows || squeueRows.length === 0) {
+    if (el.squeueSubtitle) {
+      el.squeueSubtitle.textContent = 'Cluster offline • Connect to 10.206.4.128';
+    }
+    if (el.squeueFooterStatus) {
+      el.squeueFooterStatus.textContent = 'Cluster Inactive';
+    }
+    if (el.squeueTbody) {
       el.squeueTbody.innerHTML = `
         <tr>
-          <td colspan="8" class="text-center py-7 text-slate-500">
-            <div class="flex flex-col items-center justify-center space-y-1">
-              <svg class="w-6 h-6 text-slate-600 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-              <span class="text-xs font-medium text-slate-400">Queue is idle. No jobs currently running on cluster.</span>
-              <span class="text-[11px] text-slate-500">All 64 cores per node are free for job submissions.</span>
+          <td colspan="8" class="text-center py-10 text-slate-500">
+            <div class="flex flex-col items-center justify-center space-y-2">
+              <div class="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center mb-1 border border-slate-700">
+                <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 4.243a9 9 0 01-12.728 0m0 0l2.829-2.829m-2.829 2.829L3 21m2.828-15.536a9 9 0 0112.728 0M8.464 15.536a5 5 0 010-7.072m0 0l2.829 2.829" />
+                </svg>
+              </div>
+              <span class="text-xs font-semibold text-slate-300">Not Connected to Cluster</span>
+              <span class="text-[11px] text-slate-500 max-w-xs">Slurm queue is inactive. Connect via SSH to stream active batch jobs in real time.</span>
             </div>
           </td>
         </tr>
       `;
-    } else {
-      el.squeueTbody.innerHTML = squeueRows.map(job => {
-        const isRun = (job.state === 'R' || job.state === 'RUNNING');
-        const stBadge = isRun
-          ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">R</span>`
-          : `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">${job.state || 'PD'}</span>`;
+    }
+    if (el.squeueRawContainer) {
+      el.squeueRawContainer.textContent = '[Cluster Not Connected]\nPlease authenticate via the Live Feed button in the header or click "Fetch Live" to connect to 10.206.4.128.';
+    }
+  } else {
+    if (el.squeueSubtitle) {
+      el.squeueSubtitle.textContent = 'Active running & queued batch jobs';
+    }
+    if (el.squeueFooterStatus) {
+      el.squeueFooterStatus.textContent = 'Streaming 7s via SSH';
+    }
 
-        return `
-          <tr class="hover:bg-slate-800/40 transition">
-            <td class="p-2.5 font-mono text-blue-400 font-semibold">${job.id}</td>
-            <td class="p-2.5 text-slate-300">${job.partition || 'compute'}</td>
-            <td class="p-2.5 font-medium text-slate-100 max-w-[120px] truncate" title="${job.job || ''}">${job.job || 'batch_job'}</td>
-            <td class="p-2.5 text-slate-300 font-mono">${job.user || 'user'}</td>
-            <td class="p-2.5 text-center">${stBadge}</td>
-            <td class="p-2.5 text-slate-400 font-mono">${job.elapsed || '00:00'}</td>
-            <td class="p-2.5 text-center text-slate-300">${job.nodes || '1'}</td>
-            <td class="p-2.5 font-bold text-slate-200 font-mono">${job.nodeList || job.nodes || '-'}</td>
+    let squeueRows = (live && Array.isArray(live.squeue))
+      ? live.squeue
+      : (live && Array.isArray(live.activeJobs))
+      ? live.activeJobs
+      : [];
+
+    const validStates = ['R', 'PD', 'CG', 'CD', 'CF', 'F', 'TO', 'RUNNING', 'PENDING', 'COMPLETED'];
+    squeueRows = squeueRows.map(job => {
+      let id = String(job.id || '').trim();
+      let part = String(job.partition || '').trim();
+      let jName = String(job.job || '').trim();
+      let uName = String(job.user || '').trim();
+      let st = String(job.state || '').trim().toUpperCase();
+      let elap = String(job.elapsed || '').trim();
+      let nCnt = String(job.nodes || '').trim();
+      let nLst = String(job.nodeList || job.nodelist || '').trim();
+
+      if ((uName.includes('.sh') || uName.includes('.py')) && !validStates.includes(st)) {
+        const realUser = st.toLowerCase();
+        const realJob = uName;
+        uName = realUser;
+        jName = realJob;
+        st = 'R';
+      } else if (!validStates.includes(st) && (st.startsWith('DR_') || st.startsWith('USER') || st.includes('_'))) {
+        uName = st.toLowerCase();
+        st = 'R';
+      }
+
+      return {
+        id,
+        partition: part || 'compute',
+        job: jName || 'batch_job',
+        user: uName || 'user',
+        state: st || 'R',
+        elapsed: elap || '00:00',
+        nodes: nCnt || '1',
+        nodeList: nLst || '-'
+      };
+    });
+
+    if (el.squeueTbody) {
+      if (!squeueRows || squeueRows.length === 0) {
+        el.squeueTbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="text-center py-7 text-slate-500">
+              <div class="flex flex-col items-center justify-center space-y-1">
+                <svg class="w-6 h-6 text-slate-600 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                <span class="text-xs font-medium text-slate-400">Queue is idle. No jobs currently running on cluster.</span>
+                <span class="text-[11px] text-slate-500">All 64 cores per node are free for job submissions.</span>
+              </div>
+            </td>
           </tr>
         `;
-      }).join('');
-    }
-  }
-
-  // Update Squeue Count Badge
-  if (el.squeueCountBadge) {
-    const runCount = squeueRows ? squeueRows.filter(j => j.state === 'R' || j.state === 'RUNNING').length : 0;
-    el.squeueCountBadge.textContent = `${runCount} Running`;
-    if (runCount > 0) {
-      el.squeueCountBadge.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800';
-    } else {
-      el.squeueCountBadge.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700';
-    }
-  }
-
-  // Render Squeue Raw CLI
-  if (el.squeueRawContainer) {
-    let rawText = (live && live.squeueRaw) ? live.squeueRaw : '';
-    if (!rawText) {
-      if (!squeueRows || squeueRows.length === 0) {
-        rawText = 'JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)\n(queue empty - no active jobs)';
       } else {
-        rawText = 'JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)\n';
-        squeueRows.forEach(j => {
-          rawText += `${String(j.id).padEnd(6)}${(j.partition || 'compute').padEnd(14)}${(j.job || 'job').slice(0, 8).padEnd(9)}${(j.user || 'user').slice(0, 8).padEnd(9)}${(j.state || 'R').padEnd(3)}${(j.elapsed || '00:00:00').padEnd(11)}${String(j.nodes || 1).padEnd(6)}${j.nodeList || 'node1'}\n`;
-        });
+        el.squeueTbody.innerHTML = squeueRows.map(job => {
+          const isRun = (job.state === 'R' || job.state === 'RUNNING');
+          const stBadge = isRun
+            ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">R</span>`
+            : `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">${job.state || 'PD'}</span>`;
+
+          return `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="p-2.5 font-mono text-blue-400 font-semibold">${job.id}</td>
+              <td class="p-2.5 text-slate-300">${job.partition || 'compute'}</td>
+              <td class="p-2.5 font-medium text-slate-100 max-w-[120px] truncate" title="${job.job || ''}">${job.job || 'batch_job'}</td>
+              <td class="p-2.5 text-slate-300 font-mono">${job.user || 'user'}</td>
+              <td class="p-2.5 text-center">${stBadge}</td>
+              <td class="p-2.5 text-slate-400 font-mono">${job.elapsed || '00:00'}</td>
+              <td class="p-2.5 text-center text-slate-300">${job.nodes || '1'}</td>
+              <td class="p-2.5 font-bold text-slate-200 font-mono">${job.nodeList || job.nodes || '-'}</td>
+            </tr>
+          `;
+        }).join('');
       }
     }
-    el.squeueRawContainer.textContent = rawText.trim();
+
+    if (el.squeueCountBadge) {
+      const runCount = squeueRows ? squeueRows.filter(j => j.state === 'R' || j.state === 'RUNNING').length : 0;
+      el.squeueCountBadge.textContent = `${runCount} Running`;
+      if (runCount > 0) {
+        el.squeueCountBadge.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800';
+      } else {
+        el.squeueCountBadge.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700';
+      }
+    }
+
+    if (el.squeueRawContainer) {
+      let rawText = (live && live.squeueRaw) ? live.squeueRaw : '';
+      if (!rawText) {
+        if (!squeueRows || squeueRows.length === 0) {
+          rawText = 'JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)\n(queue empty - no active jobs)';
+        } else {
+          rawText = 'JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)\n';
+          squeueRows.forEach(j => {
+            rawText += `${String(j.id).padEnd(6)}${(j.partition || 'compute').padEnd(14)}${(j.job || 'job').slice(0, 8).padEnd(9)}${(j.user || 'user').slice(0, 8).padEnd(9)}${(j.state || 'R').padEnd(3)}${(j.elapsed || '00:00:00').padEnd(11)}${String(j.nodes || 1).padEnd(6)}${j.nodeList || 'node1'}\n`;
+          });
+        }
+      }
+      el.squeueRawContainer.textContent = rawText.trim();
+    }
   }
 }
 

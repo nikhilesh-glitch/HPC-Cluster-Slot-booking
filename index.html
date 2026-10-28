@@ -109,9 +109,9 @@
               <div>
                 <div class="flex items-center space-x-2">
                   <h3 class="text-sm font-bold text-white tracking-wide font-mono">sinfo</h3>
-                  <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">Cluster Nodes & Partitions</span>
+                  <span id="sinfo-status-badge" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-950/80 text-rose-300 border border-rose-800">Not Connected</span>
                 </div>
-                <p class="text-[11px] text-slate-400 mt-0.5">8 Compute Nodes (64c) + 1 GPU Node (64c + 4x A100)</p>
+                <p id="sinfo-subtitle" class="text-[11px] text-slate-400 mt-0.5">Cluster offline • Connect to 10.206.4.128</p>
               </div>
             </div>
             <!-- Actions: Fetch Live & Raw Toggle -->
@@ -153,15 +153,15 @@
         <div class="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
           <div class="flex items-center space-x-3 text-[11px]">
             <span class="flex items-center space-x-1.5">
-              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span id="sinfo-idle-count" class="font-medium text-slate-300">9 Idle</span>
+              <span id="sinfo-idle-dot" class="w-2 h-2 rounded-full bg-slate-600"></span>
+              <span id="sinfo-idle-count" class="font-medium text-slate-400">-- Idle</span>
             </span>
             <span class="flex items-center space-x-1.5">
-              <span class="w-2 h-2 rounded-full bg-blue-400"></span>
-              <span id="sinfo-alloc-count" class="font-medium text-slate-300">0 Allocated</span>
+              <span id="sinfo-alloc-dot" class="w-2 h-2 rounded-full bg-slate-600"></span>
+              <span id="sinfo-alloc-count" class="font-medium text-slate-400">-- Allocated</span>
             </span>
           </div>
-          <span class="text-[10px] text-slate-500 font-mono">Slurm Cluster • 10.206.4.128</span>
+          <span id="sinfo-footer-cluster" class="text-[10px] text-slate-500 font-mono">Slurm Cluster • Not Connected</span>
         </div>
       </div>
 
@@ -177,9 +177,9 @@
               <div>
                 <div class="flex items-center space-x-2">
                   <h3 class="text-sm font-bold text-white tracking-wide font-mono">squeue</h3>
-                  <span id="squeue-count-badge" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800">0 Running</span>
+                  <span id="squeue-count-badge" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-950/80 text-rose-300 border border-rose-800">Not Connected</span>
                 </div>
-                <p class="text-[11px] text-slate-400 mt-0.5">Active running & queued batch jobs</p>
+                <p id="squeue-subtitle" class="text-[11px] text-slate-400 mt-0.5">Cluster offline • Connect to 10.206.4.128</p>
               </div>
             </div>
             <!-- Actions: Fetch Live & Raw Toggle -->
@@ -231,7 +231,7 @@
               <span>Pending</span>
             </span>
           </div>
-          <span class="text-[10px] text-slate-500 font-mono">Streaming 7s via SSH</span>
+          <span id="squeue-footer-status" class="text-[10px] text-slate-500 font-mono">Cluster Inactive</span>
         </div>
       </div>
 
@@ -1074,6 +1074,6 @@
   </footer>
 
   <!-- APPLICATION ENTRY SCRIPT (Works directly on file://, localhost, and GitHub Pages) -->
-  <script src="./app.js?v=2.1"></script>
+  <script src="./app.js?v=2.2"></script>
 </body>
 </html>
